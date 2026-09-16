@@ -13,16 +13,22 @@ export const MODULES: CoachModule[] = [
     enabled: true,
   },
   {
-    id: 'prospecting',
-    name: '主顧開拓',
-    tagline: '教材整理中，敬請期待',
-    enabled: false,
+    id: 'prospecting-appointment',
+    name: '主顧開拓與電話約訪',
+    tagline: 'S1–S2 從名單到約到見面，定聯與電話約訪話術',
+    enabled: true,
   },
   {
-    id: 'appointment',
-    name: '電話約訪',
-    tagline: '教材整理中，敬請期待',
-    enabled: false,
+    id: 'proposal-presentation',
+    name: '說明建議書',
+    tagline: 'S5 緊扣痛點的生活化描述與敲年期敲額度',
+    enabled: true,
+  },
+  {
+    id: 'closing-referral',
+    name: '成交與轉介',
+    tagline: 'S6 反對問題處理、激勵成交、要求轉介',
+    enabled: true,
   },
 ];
 
