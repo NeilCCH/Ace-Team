@@ -14,7 +14,7 @@ export const MODULES: CoachModule[] = [
   },
   {
     id: 'prospecting-appointment',
-    name: '主顧開拓與電話約訪',
+    name: '主顧開拓 與 電話約訪',
     tagline: 'S1–S2 從名單到約到見面，定聯與電話約訪話術',
     enabled: true,
   },
