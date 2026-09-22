@@ -7,12 +7,10 @@ type Mode = 'case' | 'roleplay';
 type Message = { role: 'user' | 'assistant'; content: string; isError?: boolean };
 const CASE_LIMIT = 12000;
 const MESSAGE_LIMIT = 4000;
-const PERSONAL_DATA = /(?:09\d{2}[-\s]?\d{3}[-\s]?\d{3}|[A-Z][12]\d{8}|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,})/i;
 
 export default function Home() {
   const [moduleId, setModuleId] = useState(MODULES[0].id);
   const [caseText, setCaseText] = useState('');
-  const [confirmed, setConfirmed] = useState(false);
   const [started, setStarted] = useState(false);
   const [mode, setMode] = useState<Mode>('case');
   const [messages, setMessages] = useState<Message[]>([]);
@@ -23,7 +21,6 @@ export default function Home() {
   const busy = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const module = MODULES.find((item) => item.id === moduleId) ?? MODULES[0];
-  const hasPersonalData = PERSONAL_DATA.test(caseText);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -63,7 +60,6 @@ export default function Home() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? '無法載入範例');
       setCaseText(data.sampleCase.slice(0, CASE_LIMIT));
-      setConfirmed(false);
     } catch (error) {
       window.alert(error instanceof Error ? error.message : '無法載入範例');
     } finally {
@@ -72,7 +68,7 @@ export default function Home() {
   }
 
   function startCase() {
-    if (!caseText.trim() || !confirmed || hasPersonalData || busy.current) return;
+    if (!caseText.trim() || busy.current) return;
     const first: Message = { role: 'user', content: caseText.trim() };
     setStarted(true);
     setMessages([first]);
@@ -123,7 +119,6 @@ export default function Home() {
     setStarted(false);
     setMessages([]);
     setCaseText('');
-    setConfirmed(false);
     setMode('case');
     setDraft('');
   }
@@ -154,19 +149,14 @@ export default function Home() {
           <button type="button" className="ghost-btn" disabled={loading} onClick={restart}>換一個個案</button></div>}</header>
       {!started ? <section className="intro-panel" aria-labelledby="case-title">
         <span className="eyebrow">步驟 1 / 提供背景</span><h2 id="case-title">描述你想討論的客戶情境</h2>
-        <p>提供客戶背景、目前進度、客戶說過的關鍵句，以及你希望練習的問題。請先移除真實姓名與聯絡方式。</p>
-        <label className="field-label" htmlFor="case-input">去識別化個案內容</label>
+        <p>提供客戶背景、目前進度、客戶說過的關鍵句，以及你希望練習的問題。</p>
+        <label className="field-label" htmlFor="case-input">個案內容</label>
         <textarea id="case-input" className="case-input" maxLength={CASE_LIMIT} value={caseText}
           placeholder="例如：客戶約 40 歲，有兩名子女；擔心收入中斷。上次談到保費時說「我想再想想」。我想練習如何回應。"
-          onChange={(event) => { setCaseText(event.target.value); setConfirmed(false); }} />
+          onChange={(event) => setCaseText(event.target.value)} />
         <div className="input-meta">{caseText.length.toLocaleString()} / {CASE_LIMIT.toLocaleString()} 字</div>
-        {hasPersonalData && <p className="privacy-warning" role="alert">偵測到可能的電話、身分證字號或電子郵件。請先刪除或改寫。</p>}
-        <div className="privacy-panel"><strong>送出前請確認</strong>
-          <p>內容會傳送到第三方 AI 服務 Anthropic 進行分析。請勿輸入姓名、電話、身分證字號、地址、保單號碼或其他可辨識個人的資料。自動偵測無法找出所有敏感資訊。</p>
-          <label className="confirm-row"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
-            我已去識別化，並了解資料傳送方式</label></div>
         <div className="action-row"><button type="button" className="ghost-btn" onClick={loadSample} disabled={sampleLoading}>{sampleLoading ? '載入中…' : '載入範例個案'}</button>
-          <button type="button" className="primary-btn" onClick={startCase} disabled={!caseText.trim() || !confirmed || hasPersonalData || loading}>開始個案分析</button></div>
+          <button type="button" className="primary-btn" onClick={startCase} disabled={!caseText.trim() || loading}>開始個案分析</button></div>
       </section> : <>
         <div className="chat-scroll" ref={scrollRef} role="log" aria-live="polite" aria-relevant="additions text">
           {messages.map((item, index) => <div key={index} className={`bubble-row ${item.role}`}>

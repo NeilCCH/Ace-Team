@@ -302,34 +302,6 @@ textarea.case-input {
   margin-top: -12px;
 }
 
-.privacy-panel {
-  background: var(--accent-soft);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px;
-  font-size: 13px;
-}
-
-.privacy-panel p {
-  margin: 8px 0;
-}
-
-.confirm-row {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-  cursor: pointer;
-}
-
-.confirm-row input {
-  margin-top: 3px;
-}
-
-.privacy-warning {
-  color: var(--danger) !important;
-  font-weight: 700;
-}
-
 .action-row {
   display: flex;
   gap: 10px;
