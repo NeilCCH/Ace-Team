@@ -15,6 +15,7 @@
   --assistant-bubble-text: #1f2430;
   --danger: #b3261e;
   --radius: 14px;
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -34,6 +35,7 @@
     --assistant-bubble: #232833;
     --assistant-bubble-text: #eceef1;
     --danger: #ff8a80;
+    color-scheme: dark;
   }
 }
 
@@ -53,6 +55,26 @@ body {
 
 button {
   font-family: inherit;
+}
+
+button:focus-visible,
+textarea:focus-visible,
+input:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
 }
 
 .app-shell {
@@ -106,6 +128,10 @@ button {
   color: var(--text);
 }
 
+.module-item span {
+  display: block;
+}
+
 .module-item.active {
   background: var(--accent-soft);
   border-color: var(--accent);
@@ -146,8 +172,25 @@ button {
 }
 
 .main-header h1 {
-  font-size: 16px;
+  font-size: 21px;
   margin: 0;
+}
+
+.eyebrow {
+  display: block;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  margin-bottom: 5px;
+}
+
+.mode-badge {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  border-radius: 999px;
+  font-size: 12px;
+  padding: 6px 10px;
 }
 
 .header-controls {
@@ -216,7 +259,9 @@ button {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  max-width: 640px;
+  max-width: 760px;
+  width: 100%;
+  margin: 0 auto;
 }
 
 .intro-panel h2 {
@@ -243,6 +288,46 @@ textarea.case-input {
   line-height: 1.6;
   resize: vertical;
   font-family: inherit;
+}
+
+.field-label {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.input-meta {
+  color: var(--text-muted);
+  text-align: right;
+  font-size: 12px;
+  margin-top: -12px;
+}
+
+.privacy-panel {
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  font-size: 13px;
+}
+
+.privacy-panel p {
+  margin: 8px 0;
+}
+
+.confirm-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  cursor: pointer;
+}
+
+.confirm-row input {
+  margin-top: 3px;
+}
+
+.privacy-warning {
+  color: var(--danger) !important;
+  font-weight: 700;
 }
 
 .action-row {
@@ -319,6 +404,29 @@ textarea.case-input {
   color: var(--text-muted);
 }
 
+.bubble-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.bubble-actions button {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.bubble.error .bubble-actions button {
+  color: var(--danger);
+}
+
+.conversation-actions {
+  padding: 8px 24px;
+  border-top: 1px solid var(--border);
+}
+
 .composer {
   border-top: 1px solid var(--border);
   padding: 16px 24px;
@@ -326,8 +434,9 @@ textarea.case-input {
   gap: 10px;
 }
 
-.composer input {
+.composer textarea {
   flex: 1;
+  min-width: 0;
   border-radius: 10px;
   border: 1px solid var(--border);
   background: var(--surface);
@@ -335,11 +444,13 @@ textarea.case-input {
   padding: 10px 14px;
   font-size: 14px;
   font-family: inherit;
+  resize: vertical;
 }
 
-.composer input:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+.keyboard-hint {
+  margin: -8px 24px 12px;
+  color: var(--text-muted);
+  font-size: 11px;
 }
 
 @media (max-width: 720px) {
@@ -370,11 +481,36 @@ textarea.case-input {
   }
 
   .main {
-    height: auto;
+    height: calc(100dvh - 102px);
+    min-height: 460px;
   }
 
-  .chat-scroll,
   .intro-panel {
-    max-height: 70vh;
+    max-height: 100%;
+    padding: 24px 16px;
+  }
+
+  .chat-scroll {
+    min-height: 0;
+    padding: 16px;
+  }
+
+  .bubble {
+    max-width: 94%;
+  }
+
+  .composer {
+    padding: 12px 16px;
+  }
+
+  .conversation-actions {
+    padding: 8px 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
   }
 }

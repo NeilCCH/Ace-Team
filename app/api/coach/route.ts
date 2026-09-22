@@ -10,22 +10,39 @@ interface ChatMessage {
   content: string;
 }
 
-interface CoachRequestBody {
-  moduleId: string;
-  mode: CoachMode;
-  messages: ChatMessage[];
-}
-
 export async function POST(req: NextRequest) {
-  const body = (await req.json()) as CoachRequestBody;
-  const { moduleId, mode, messages } = body;
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: '請提供有效的 JSON。' }, { status: 400 });
+  }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return NextResponse.json({ error: '請提供有效的請求內容。' }, { status: 400 });
+  }
+  const { moduleId, mode, messages } = body as Record<string, unknown>;
+  if (typeof moduleId !== 'string' || (mode !== 'case' && mode !== 'roleplay')) {
+    return NextResponse.json({ error: '模組或模式無效。' }, { status: 400 });
+  }
 
   const module = getModule(moduleId);
   if (!module || !module.enabled) {
     return NextResponse.json({ error: '這個模組還沒有教材，敬請期待。' }, { status: 400 });
   }
-  if (!Array.isArray(messages) || messages.length === 0) {
+  if (!Array.isArray(messages) || messages.length === 0 || messages.length > 80) {
     return NextResponse.json({ error: '缺少對話內容。' }, { status: 400 });
+  }
+  if (!messages.every((message: unknown) =>
+    message && typeof message === 'object' &&
+    ((message as ChatMessage).role === 'user' || (message as ChatMessage).role === 'assistant') &&
+    typeof (message as ChatMessage).content === 'string' &&
+    (message as ChatMessage).content.trim().length > 0 &&
+    (message as ChatMessage).content.length <= 12000
+  ) || messages[0].role !== 'user' || messages[messages.length - 1].role !== 'user') {
+    return NextResponse.json({ error: '對話格式或內容長度無效。' }, { status: 400 });
+  }
+  if (JSON.stringify(messages).length > 100000) {
+    return NextResponse.json({ error: '對話內容過長。' }, { status: 413 });
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -37,7 +54,7 @@ export async function POST(req: NextRequest) {
   }
 
   const anthropic = new Anthropic({ apiKey });
-  const system = buildSystemPrompt(moduleId, mode);
+  const system = buildSystemPrompt(moduleId, mode as CoachMode);
 
   try {
     const response = await anthropic.messages.create({

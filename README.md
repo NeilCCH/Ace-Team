@@ -1,71 +1,43 @@
-# 銷售 AI 教練（Sales AI Coach）
+# 銷售 AI 教練
 
-公勝保經高雄業務中心的業務教練 APP。業務員貼上客戶個案（CN 客戶需求表／面談紀錄），
-AI 教練依方法論框架逐步診斷、給出下一步話術建議，也可以角色扮演對練。
+公勝保經高雄業務中心的銷售情境教練。輸入去識別化個案後，可取得分析與話術建議，並與 AI 客戶角色扮演，結束時取得講評。
 
-這個專案是從「Claude Code 技能」起步包（貼在對話裡用的 SKILL.md）長成一個真正的
-網頁 APP：同一套方法論內容，改成後端呼叫 Claude API，前端做成聊天介面，之後可以
-直接部署給整個業務中心用，也可以再包裝成手機 APP（PWA）。
+## 四個模組
 
-## 目前範圍（MVP）
+| 模組 | 範圍 |
+| --- | --- |
+| 主顧開拓 與 電話約訪 | S1–S2 名單、定聯與約訪 |
+| 需求分析・找痛點 | S3–S4 初步面談、發掘與深化需求 |
+| 說明建議書 | S5 建議書呈現、年期與額度 |
+| 成交與轉介 | S6 反對問題、成交與轉介 |
 
-只做一個模組：**需求分析・找痛點**（S3–S4 初步面談到發掘需求）。其他模組
-（主顧開拓、電話約訪…）先在介面上留位置、顯示「教材整理中」，等這個模組校準
-穩定後，比照同樣的資料結構擴充即可，不用改架構。
+每個模組的教練規則、方法論與範例個案位於 `content/modules/<模組 ID>/`。模組登錄在 `lib/modules.ts`。
 
-## 架構
+## 使用流程
 
-- **前端＋後端**：Next.js（App Router + TypeScript），可直接部署到 Vercel。
-- **AI**：後端 API route（`app/api/coach/route.ts`）呼叫 Anthropic Claude API，
-  用你自己的 API Key，回應即時串接回聊天畫面。
-- **教練的「知識」放在檔案裡，不是寫死在程式碼裡**：
-  `content/modules/<模組>/skill.md`（教練規則）＋ `framework.md`（方法論框架卡）
-  ＋ `sample-case.md`（測試用範例個案）。要調校教練的口吻或深度，改這幾份
-  Markdown 就好，不用碰程式。
-- 新增模組＝在 `content/modules/` 底下新增一個資料夾，放同樣三份檔案，再到
-  `lib/modules.ts` 把它標成 `enabled: true`。
+1. 選擇模組，輸入已去識別化的客戶背景、進度、關鍵句與練習目標，或載入範例。
+2. 確認資料傳送提醒，點選「開始個案分析」。
+3. 依教練建議追問；需要練習時點選「開始角色扮演」。
+4. 點選「結束對練並取得講評」以取得回饋。
 
-```
-content/modules/need-analysis/
-├── skill.md          教練規則（原 SKILL.md）
-├── framework.md       方法論框架卡
-└── sample-case.md     測試用範例個案
-```
+輸入框支援多行。按 Enter 換行，按 ⌘/Ctrl + Enter 送出。教練回覆可複製；失敗時可重試。
+
+## 個資與法遵
+
+個案會送至第三方 AI 服務 Anthropic。送出前應移除姓名、電話、身分證字號、地址、保單號碼及其他可識別客戶的資料，並遵守公司的個資、資安與 AI 使用規範。介面會偵測部分常見個資格式，但無法保證涵蓋所有敏感資訊。請勿將 AI 建議視為公司核准話術、商品建議或法遵審核結果。
+
+目前沒有使用者登入與持久化對話紀錄；瀏覽器重新整理後，畫面中的對話會消失。正式開放團隊使用前，應完成權限與費用控管。
 
 ## 本機執行
 
-1. 安裝套件：
-   ```bash
-   npm install
-   ```
-2. 複製 `.env.example` 為 `.env.local`，填入你的 Anthropic API Key
-   （到 https://console.anthropic.com 申請）：
-   ```bash
-   cp .env.example .env.local
-   ```
-3. 啟動：
-   ```bash
-   npm run dev
-   ```
-   打開 http://localhost:3000。
+```bash
+npm ci
+cp .env.example .env.local
+npm run dev
+```
 
-## 部署（之後給團隊用）
+在 `.env.local` 設定 `ANTHROPIC_API_KEY`，然後開啟 http://localhost:3000。可用 `ANTHROPIC_MODEL` 指定模型。執行 `npm run lint` 做 TypeScript 靜態檢查，執行 `npm run build` 確認建置。
 
-最簡單的方式是把這個 repo 接到 [Vercel](https://vercel.com)（GitHub 登入、
-選這個 repo、在專案設定填 `ANTHROPIC_API_KEY` 環境變數即可，會自動建置部署）。
-部署後同事打開網址就能用，之後要包成手機 APP，也可以先用「加入主畫面」
-（PWA）的方式，不用重寫。
+## 部署
 
-## 目前故意先不做的事（下一步再考慮）
-
-- **多人帳號／權限**：現在沒有登入機制，誰有網址就能用，也共用同一支 API Key
-  的額度。給整個業務中心用之前，建議至少加一層簡單密碼或帳號。
-- **對話紀錄保存**：目前對話只存在瀏覽器當下畫面，重新整理就消失。之後若要
-  累積「售後反饋」讓教練越校越準，需要接資料庫。
-- **串流回覆**：現在是等教練整段回覆完才顯示，之後可以改成逐字顯示（體感更快）。
-
-## 這次的教練規則來源
-
-`content/modules/need-analysis/` 底下的內容，來自上傳的
-`sales-coach-starter` 起步包，直接沿用其中的技能定義、框架卡與範例個案，
-沒有更動方法論本身。
+可將 GitHub repo 連接 Vercel，並在部署環境設定 `ANTHROPIC_API_KEY`。不要把 API 金鑰提交到 Git。
