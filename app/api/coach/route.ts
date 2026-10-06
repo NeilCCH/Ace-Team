@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { buildSystemPrompt, CoachMode } from '@/lib/systemPrompt';
 import { getModule } from '@/lib/modules';
+import { MAX_MESSAGES, MAX_HISTORY_LENGTH, MAX_MESSAGE_LENGTH, validReply } from '@/lib/conversation';
 
 export const runtime = 'nodejs';
 
@@ -29,19 +30,19 @@ export async function POST(req: NextRequest) {
   if (!module || !module.enabled) {
     return NextResponse.json({ error: '這個模組還沒有教材，敬請期待。' }, { status: 400 });
   }
-  if (!Array.isArray(messages) || messages.length === 0 || messages.length > 80) {
-    return NextResponse.json({ error: '缺少對話內容。' }, { status: 400 });
+  if (!Array.isArray(messages) || messages.length === 0 || messages.length > MAX_MESSAGES) {
+    return NextResponse.json({ error: '對話內容為空或已超過訊息上限，請開啟新個案。' }, { status: 400 });
   }
   if (!messages.every((message: unknown) =>
     message && typeof message === 'object' &&
     ((message as ChatMessage).role === 'user' || (message as ChatMessage).role === 'assistant') &&
     typeof (message as ChatMessage).content === 'string' &&
     (message as ChatMessage).content.trim().length > 0 &&
-    (message as ChatMessage).content.length <= 12000
+    (message as ChatMessage).content.length <= MAX_MESSAGE_LENGTH
   ) || messages[0].role !== 'user' || messages[messages.length - 1].role !== 'user') {
     return NextResponse.json({ error: '對話格式或內容長度無效。' }, { status: 400 });
   }
-  if (JSON.stringify(messages).length > 100000) {
+  if (JSON.stringify(messages).length > MAX_HISTORY_LENGTH) {
     return NextResponse.json({ error: '對話內容過長。' }, { status: 413 });
   }
 
@@ -69,6 +70,10 @@ export async function POST(req: NextRequest) {
       .map((block) => block.text)
       .join('\n');
 
+    // Bound the returned message too, so the client can reserve final-feedback space.
+    if (!validReply(reply)) {
+      return NextResponse.json({ error: '教練回覆為空或過長，請重試。' }, { status: 502 });
+    }
     return NextResponse.json({ reply });
   } catch (err) {
     console.error('coach api error', err);
