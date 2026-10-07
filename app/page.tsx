@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { MODULES } from '@/lib/modules';
+import { canContinue, FINAL_FEEDBACK, validReply } from '@/lib/conversation';
 
 type Mode = 'case' | 'roleplay';
 type Message = { role: 'user' | 'assistant'; content: string; isError?: boolean };
@@ -19,6 +20,20 @@ export default function Home() {
   const [sampleLoading, setSampleLoading] = useState(false);
   const [copied, setCopied] = useState<number | null>(null);
   const busy = useRef(false);
+  const sampleRequest = useRef<AbortController | null>(null);
+  const [sessionClosed, setSessionClosed] = useState(false);
+  const [budgetWarning, setBudgetWarning] = useState(false);
+  const pending = useRef<{ messages: Message[]; mode: Mode; afterMode: Mode; close: boolean } | null>(null);
+  const cleanMessages = messages.filter((item) => !item.isError);
+  const nearLimit = !canContinue([...cleanMessages, { role: 'user', content: draft.trim() || '繼續' }]);
+
+  useEffect(() => () => { sampleRequest.current?.abort(); }, []);
+
+  function cancelSample() {
+    sampleRequest.current?.abort();
+    sampleRequest.current = null;
+    setSampleLoading(false);
+  }
   const scrollRef = useRef<HTMLDivElement>(null);
   const module = MODULES.find((item) => item.id === moduleId) ?? MODULES[0];
 
@@ -26,8 +41,9 @@ export default function Home() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, loading]);
 
-  async function askCoach(next: Message[], nextMode: Mode) {
+  async function askCoach(next: Message[], nextMode: Mode, afterMode: Mode = nextMode, close = false) {
     if (busy.current) return;
+    pending.current = { messages: next, mode: nextMode, afterMode, close };
     busy.current = true;
     setLoading(true);
     try {
@@ -37,10 +53,13 @@ export default function Home() {
         body: JSON.stringify({ moduleId, mode: nextMode, messages: next.map(({ role, content }) => ({ role, content })) }),
       });
       const data = await response.json();
-      if (!response.ok || typeof data.reply !== 'string') {
+      if (!response.ok || typeof data.reply !== 'string' || !validReply(data.reply)) {
         throw new Error(typeof data.error === 'string' ? data.error : '回覆格式異常，請重試。');
       }
       setMessages((previous) => [...previous, { role: 'assistant', content: data.reply }]);
+      setMode(afterMode);
+      setSessionClosed(close);
+      pending.current = null;
       return true;
     } catch (error) {
       setMessages((previous) => [...previous, {
@@ -54,21 +73,32 @@ export default function Home() {
   }
 
   async function loadSample() {
+    cancelSample();
+    const controller = new AbortController();
+    sampleRequest.current = controller;
     setSampleLoading(true);
     try {
-      const response = await fetch('/api/sample-case?moduleId=' + encodeURIComponent(moduleId));
+      const response = await fetch('/api/sample-case?moduleId=' + encodeURIComponent(moduleId), { signal: controller.signal });
       const data = await response.json();
+      if (controller.signal.aborted || sampleRequest.current !== controller) return;
       if (!response.ok) throw new Error(data.error ?? '無法載入範例');
+      if (typeof data.sampleCase !== 'string') throw new Error('範例格式異常，請重試。');
       setCaseText(data.sampleCase.slice(0, CASE_LIMIT));
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : '無法載入範例');
+      if (!controller.signal.aborted && sampleRequest.current === controller) {
+        window.alert(error instanceof Error ? error.message : '無法載入範例');
+      }
     } finally {
-      setSampleLoading(false);
+      if (sampleRequest.current === controller) {
+        sampleRequest.current = null;
+        setSampleLoading(false);
+      }
     }
   }
 
   function startCase() {
     if (!caseText.trim() || busy.current) return;
+    cancelSample();
     const first: Message = { role: 'user', content: caseText.trim() };
     setStarted(true);
     setMessages([first]);
@@ -76,46 +106,54 @@ export default function Home() {
   }
 
   function send() {
-    if (!draft.trim() || busy.current) return;
+    if (!draft.trim() || busy.current || sessionClosed || pending.current) return;
     const next: Message[] = [...messages.filter((item) => !item.isError), { role: 'user', content: draft.trim() }];
+    if (!canContinue(next)) { setBudgetWarning(true); return; }
+    setBudgetWarning(false);
     setMessages(next);
     setDraft('');
     void askCoach(next, mode);
   }
 
   async function beginRoleplay() {
-    if (busy.current) return;
+    if (busy.current || sessionClosed || pending.current) return;
     const next: Message[] = [...messages.filter((item) => !item.isError),
       { role: 'user', content: '開始角色扮演。請依個案扮演客戶，先說第一句話。' }];
+    if (!canContinue(next)) { setBudgetWarning(true); return; }
     setMessages(next);
     // Only switch the badge/button into "roleplay" once the coach actually replied in character —
     // otherwise a failed request left the UI claiming a roleplay was underway that never happened.
-    if (await askCoach(next, 'roleplay')) setMode('roleplay');
+    await askCoach(next, 'roleplay');
   }
 
   async function finishRoleplay() {
-    if (busy.current) return;
+    if (busy.current || sessionClosed || pending.current) return;
     const next: Message[] = [...messages.filter((item) => !item.isError),
       { role: 'user', content: '結束對練並取得講評。請停止扮演客戶，給出具體評分、做得好的地方及下一步建議。' }];
     setMessages(next);
-    if (await askCoach(next, 'roleplay')) setMode('case');
+    await askCoach(next, 'roleplay', 'case', nearLimit);
+  }
+
+  async function closeSession() {
+    if (busy.current || sessionClosed || pending.current) return;
+    const next: Message[] = [...cleanMessages, { role: 'user', content: FINAL_FEEDBACK }];
+    setMessages(next);
+    await askCoach(next, mode, 'case', true);
   }
 
   async function retry() {
-    if (busy.current) return;
-    const next = messages.filter((item) => !item.isError);
-    const lastContent = next[next.length - 1]?.content ?? '';
-    // A failed begin/finish-roleplay attempt never flipped `mode`, so retry must re-derive the
-    // intended mode from the message itself rather than trusting current `mode` state.
-    const retryMode: Mode = lastContent.startsWith('開始角色扮演') ? 'roleplay' : mode;
-    setMessages(next);
-    const ok = await askCoach(next, retryMode);
-    if (ok && lastContent.startsWith('開始角色扮演')) setMode('roleplay');
-    if (ok && lastContent.startsWith('結束對練並取得講評')) setMode('case');
+    if (busy.current || !pending.current) return;
+    const request = pending.current;
+    setMessages(request.messages);
+    await askCoach(request.messages, request.mode, request.afterMode, request.close);
   }
 
   function restart() {
     if (busy.current) return;
+    cancelSample();
+    pending.current = null;
+    setSessionClosed(false);
+    setBudgetWarning(false);
     setStarted(false);
     setMessages([]);
     setCaseText('');
@@ -153,7 +191,7 @@ export default function Home() {
         <label className="field-label" htmlFor="case-input">個案內容</label>
         <textarea id="case-input" className="case-input" maxLength={CASE_LIMIT} value={caseText}
           placeholder="例如：客戶約 40 歲，有兩名子女；擔心收入中斷。上次談到保費時說「我想再想想」。我想練習如何回應。"
-          onChange={(event) => setCaseText(event.target.value)} />
+          onChange={(event) => { cancelSample(); setCaseText(event.target.value); }} />
         <div className="input-meta">{caseText.length.toLocaleString()} / {CASE_LIMIT.toLocaleString()} 字</div>
         <div className="action-row"><button type="button" className="ghost-btn" onClick={loadSample} disabled={sampleLoading}>{sampleLoading ? '載入中…' : '載入範例個案'}</button>
           <button type="button" className="primary-btn" onClick={startCase} disabled={!caseText.trim() || loading}>開始個案分析</button></div>
@@ -167,15 +205,17 @@ export default function Home() {
               </div>}</div></div>)}
           {loading && <div className="bubble-row assistant"><div className="bubble assistant pending" role="status">教練正在整理回饋…</div></div>}
         </div>
-        <div className="conversation-actions">{mode === 'case' ?
-          <button type="button" className="ghost-btn" disabled={loading} onClick={beginRoleplay}>開始角色扮演</button> :
-          <button type="button" className="ghost-btn" disabled={loading} onClick={finishRoleplay}>結束對練並取得講評</button>}</div>
+        {(nearLimit || budgetWarning) && !sessionClosed && <p role="status">本次對話接近上限，已保留最後講評空間。請先取得講評，再開啟新個案；目前對話不會被刪減。若只是這則訊息太長，也可縮短後再送出。</p>}
+        {sessionClosed && <p role="status">本次對話已完成，可複製講評，再點選「換一個個案」。</p>}
+        <div className="conversation-actions"><button type="button" className="ghost-btn" disabled={loading || sessionClosed || !!pending.current} onClick={closeSession}>取得總結並結束本次對話</button>{mode === 'case' ?
+          <button type="button" className="ghost-btn" disabled={loading || sessionClosed || nearLimit || !!pending.current} onClick={beginRoleplay}>開始角色扮演</button> :
+          <button type="button" className="ghost-btn" disabled={loading || sessionClosed || !!pending.current} onClick={finishRoleplay}>結束對練並取得講評</button>}</div>
         <div className="composer"><label className="sr-only" htmlFor="chat-draft">輸入訊息</label>
-          <textarea id="chat-draft" rows={2} maxLength={MESSAGE_LIMIT} value={draft}
+          <textarea id="chat-draft" disabled={sessionClosed} rows={2} maxLength={MESSAGE_LIMIT} value={draft}
             placeholder={mode === 'roleplay' ? '對客戶說一句話…' : '回覆教練，或請他示範話術…'}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); send(); } }} />
-          <button type="button" className="primary-btn" onClick={send} disabled={loading || !draft.trim()}>送出</button></div>
+          <button type="button" className="primary-btn" onClick={send} disabled={loading || sessionClosed || nearLimit || !!pending.current || !draft.trim()}>送出</button></div>
         <p className="keyboard-hint">⌘ / Ctrl + Enter 送出 · Enter 換行</p>
       </>}
     </main>
