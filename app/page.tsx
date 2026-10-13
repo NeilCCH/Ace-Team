@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { SESSION_COOKIE, verifySession } from '@/lib/auth';
+import { SESSION_COOKIE, verifySession, isAdminEmail } from '@/lib/auth';
 import ChatApp from './ChatApp';
 
 export default async function Page() {
@@ -11,5 +11,5 @@ export default async function Page() {
   // middleware matcher is ever reconfigured to exclude it.
   if (!email) redirect('/login');
 
-  return <ChatApp email={email} />;
+  return <ChatApp email={email} isAdmin={isAdminEmail(email)} />;
 }

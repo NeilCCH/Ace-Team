@@ -24,3 +24,19 @@ CREATE TABLE IF NOT EXISTS case_messages (
 CREATE INDEX IF NOT EXISTS idx_cases_user_email ON cases(user_email);
 CREATE INDEX IF NOT EXISTS idx_cases_user_updated ON cases(user_email, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_case_messages_case_id ON case_messages(case_id);
+
+-- 帳號申請與開通。ADMIN_EMAILS 環境變數列的帳號不受此表限制，一律可登入
+-- （開通別人帳號的人本身不能卡在「等人開通」的雞生蛋問題）；其他 email
+-- 一定要先申請、狀態是 approved 才能登入。
+CREATE TABLE IF NOT EXISTS users (
+  id BIGSERIAL PRIMARY KEY,
+  email TEXT NOT NULL UNIQUE,
+  name TEXT,
+  note TEXT,
+  status TEXT NOT NULL DEFAULT 'pending', -- pending | approved | rejected
+  requested_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  decided_at TIMESTAMPTZ,
+  decided_by TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);

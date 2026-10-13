@@ -25,7 +25,7 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-export default function ChatApp({ email }: { email: string }) {
+export default function ChatApp({ email, isAdmin }: { email: string; isAdmin: boolean }) {
   const [view, setView] = useState<View>('coach');
   const [lineId, setLineId] = useState<CoachLine>(MODULES[0].line);
   const [moduleId, setModuleId] = useState(MODULES[0].id);
@@ -238,6 +238,7 @@ export default function ChatApp({ email }: { email: string }) {
           onClick={() => { restart(); setView('coach'); setModuleId(item.id); }}>
           <span className="module-name">{item.name}</span><span className="module-tagline">{item.tagline}</span>
         </button>)}</nav>
+      {isAdmin && <a href="/admin" className="dash-nav-btn admin-nav-link">帳號審核後台</a>}
       <div className="sidebar-spacer" />
       <div className="sidebar-footer">
         <div className="sidebar-avatar" aria-hidden="true">{email.charAt(0).toUpperCase()}</div>

@@ -169,3 +169,80 @@ export async function getDashboardStats(userEmail: string): Promise<DashboardSta
     })),
   };
 }
+
+export interface UserAccount {
+  email: string;
+  name: string | null;
+  note: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  requestedAt: string;
+  decidedAt: string | null;
+  decidedBy: string | null;
+}
+
+function toUserAccount(row: {
+  email: string;
+  name: string | null;
+  note: string | null;
+  status: string;
+  requested_at: string;
+  decided_at: string | null;
+  decided_by: string | null;
+}): UserAccount {
+  return {
+    email: row.email,
+    name: row.name,
+    note: row.note,
+    status: row.status as UserAccount['status'],
+    requestedAt: row.requested_at,
+    decidedAt: row.decided_at,
+    decidedBy: row.decided_by,
+  };
+}
+
+export async function getUserAccount(email: string): Promise<UserAccount | null> {
+  const { rows } = await getPool().query(
+    `SELECT email, name, note, status, requested_at, decided_at, decided_by FROM users WHERE email = $1`,
+    [email],
+  );
+  return rows[0] ? toUserAccount(rows[0]) : null;
+}
+
+// 申請帳號：新 email 一律建立成 pending；若之前被拒絕過，重新申請會把狀態
+// 收回 pending 重新排審，並更新姓名／備註；已經是 pending 或 approved 則
+// 原樣返回，不重複建立、不打擾正在排審或已開通的申請。
+export async function applyForAccount(email: string, name: string | null, note: string | null): Promise<UserAccount> {
+  const existing = await getUserAccount(email);
+  if (existing && existing.status !== 'rejected') return existing;
+  const { rows } = await getPool().query(
+    `INSERT INTO users (email, name, note, status, requested_at, decided_at, decided_by)
+     VALUES ($1, $2, $3, 'pending', now(), NULL, NULL)
+     ON CONFLICT (email) DO UPDATE SET
+       name = EXCLUDED.name, note = EXCLUDED.note, status = 'pending',
+       requested_at = now(), decided_at = NULL, decided_by = NULL
+     RETURNING email, name, note, status, requested_at, decided_at, decided_by`,
+    [email, name, note],
+  );
+  return toUserAccount(rows[0]);
+}
+
+export async function listUserAccounts(): Promise<UserAccount[]> {
+  const { rows } = await getPool().query(
+    `SELECT email, name, note, status, requested_at, decided_at, decided_by
+     FROM users ORDER BY (status = 'pending') DESC, requested_at DESC`,
+  );
+  return rows.map(toUserAccount);
+}
+
+export async function decideUserAccount(
+  email: string,
+  status: 'approved' | 'rejected',
+  decidedBy: string,
+): Promise<UserAccount | null> {
+  const { rows } = await getPool().query(
+    `UPDATE users SET status = $2, decided_at = now(), decided_by = $3 WHERE email = $1
+     RETURNING email, name, note, status, requested_at, decided_at, decided_by`,
+    [email, status, decidedBy],
+  );
+  return rows[0] ? toUserAccount(rows[0]) : null;
+}

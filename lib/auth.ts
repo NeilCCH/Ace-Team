@@ -63,7 +63,11 @@ export async function verifySession(token: string): Promise<string | null> {
   }
 }
 
-export function isAllowedEmail(email: string): boolean {
+// ALLOWED_EMAILS 現在是「管理員白名單」：這些帳號永遠可以登入、不受資料庫裡
+// 的申請／開通狀態限制，也是唯一能進稽核後台開通別人帳號的人——這樣才不會
+// 卡在「開通別人帳號的人，自己也要等人開通」的雞生蛋問題。其他使用者改走
+// users 資料表的申請／開通流程（見 lib/db.ts 的 applyForAccount/decideUserAccount）。
+export function isAdminEmail(email: string): boolean {
   const list = (process.env.ALLOWED_EMAILS || '')
     .split(',')
     .map((e) => e.trim().toLowerCase())

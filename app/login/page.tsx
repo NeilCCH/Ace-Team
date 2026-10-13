@@ -68,6 +68,7 @@ function LoginForm() {
         <button type="submit" className="primary-btn login-submit" disabled={loading}>
           {loading ? '登入中…' : '登入'}
         </button>
+        <a className="login-apply-link" href="/apply">還沒有帳號？申請帳號</a>
       </form>
     </div>
   );

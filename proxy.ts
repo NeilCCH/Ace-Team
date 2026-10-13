@@ -20,6 +20,6 @@ export async function proxy(req: NextRequest) {
 // 字串（Next.js 在編譯期解析），不能用變數組字串。
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|login|api/login|manifest.webmanifest|sw.js|favicon.ico|apple-icon.png|icon0.png|icon1.png|icon-192.png|icon-512.png|icon-maskable-192.png|icon-maskable-512.png).*)',
+    '/((?!_next/static|_next/image|login|api/login|apply|api/apply|manifest.webmanifest|sw.js|favicon.ico|apple-icon.png|icon0.png|icon1.png|icon-192.png|icon-512.png|icon-maskable-192.png|icon-maskable-512.png).*)',
   ],
 };
