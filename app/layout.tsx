@@ -1,9 +1,21 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import ServiceWorkerRegister from './ServiceWorkerRegister';
 
 export const metadata: Metadata = {
   title: '銷售 AI 教練',
   description: '公勝保經高雄業務中心 · 個案分析陪練',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: '銷售AI教練',
+  },
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: '#0f4c5c',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -17,7 +29,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <ServiceWorkerRegister />
+      </body>
     </html>
   );
 }
