@@ -23,9 +23,17 @@
 
 ## 資料處理與法遵
 
-個案內容會即時送至第三方 AI 服務 Anthropic 進行分析，本軟體本身不設資料庫、不登入、也不留存任何對話紀錄——瀏覽器重新整理後，畫面中的對話就會消失。請勿將 AI 建議視為公司核准話術、商品建議或法遵審核結果。
+個案內容會即時送至第三方 AI 服務 Anthropic 進行分析，本軟體本身不設資料庫、也不留存任何對話紀錄——瀏覽器重新整理後，畫面中的對話就會消失（登入狀態除外，見下）。請勿將 AI 建議視為公司核准話術、商品建議或法遵審核結果。
 
-正式開放團隊使用前，應完成權限與費用控管。
+## 登入與存取控制
+
+整個網站（含所有頁面與 API）都需要先登入才能使用，未登入會被導到 `/login`。登入規則很單純：**email 必須在允許名單裡，加上大家共用的一組存取碼**，兩者都對才能進去，沒有個別密碼、沒有資料庫，純粹是環境變數控制：
+
+- `ALLOWED_EMAILS`：允許登入的 email，逗號分隔，不分大小寫
+- `ACCESS_CODE`：所有允許登入的人共用的存取碼，自行決定內容再私下分發給使用者
+- `SESSION_SECRET`：用來簽登入 session 的密鑰，自己打一串夠長的隨機字串即可
+
+要新增或移除使用者，直接改 `ALLOWED_EMAILS` 再重新部署即可。這是最簡單的白名單做法，先求有再求好——未來如果要做成真正可以對外銷售的多租戶系統（各客戶自己的帳號、各自管理成員、線上付款訂閱），會是更大的一次改版，屆時再評估要不要做。
 
 ## 本機執行
 
@@ -35,8 +43,10 @@ cp .env.example .env.local
 npm run dev
 ```
 
-在 `.env.local` 設定 `ANTHROPIC_API_KEY`，然後開啟 http://localhost:3000。可用 `ANTHROPIC_MODEL` 指定模型。執行 `npm run lint` 做 TypeScript 靜態檢查，執行 `npm run build` 確認建置。
+在 `.env.local` 設定 `ANTHROPIC_API_KEY`、`ALLOWED_EMAILS`、`ACCESS_CODE`、`SESSION_SECRET`，然後開啟 http://localhost:3000（會先導到登入頁）。可用 `ANTHROPIC_MODEL` 指定模型。執行 `npm run lint` 做 TypeScript 靜態檢查，執行 `npm run build` 確認建置。
 
 ## 部署
 
-可將 GitHub repo 連接 Vercel，並在部署環境設定 `ANTHROPIC_API_KEY`。不要把 API 金鑰提交到 Git。
+可將 GitHub repo 連接 Vercel，並在部署環境設定 `ANTHROPIC_API_KEY`、`ALLOWED_EMAILS`、`ACCESS_CODE`、`SESSION_SECRET`。不要把這些值提交到 Git。
+
+正式上線前請確認 Anthropic Console 帳號已經完成付費設定（不是免費評估額度），否則 API 呼叫會失敗或被擋。
