@@ -1,17 +1,22 @@
 # 銷售 AI 教練
 
-保險經紀公司的銷售情境教練。輸入個案後，可取得分析與話術建議，並與 AI 客戶角色扮演，結束時取得講評。
+保險經紀公司的銷售／增員／輔導情境教練。輸入個案後，可取得分析與話術建議，並與 AI 角色扮演，結束時取得講評。可安裝為 PWA（加到手機主畫面）。
 
-## 四個模組
+## 三條線、九個模組
 
-| 模組 | 範圍 |
-| --- | --- |
-| 主顧開拓 與 電話約訪 | S1–S2 名單、定聯與約訪 |
-| 需求分析・找痛點 | S3–S4 初步面談、發掘與深化需求 |
-| 說明建議書 | S5 建議書呈現、年期與額度 |
-| 成交與轉介 | S6 反對問題、成交與轉介 |
+| 線 | 模組 | 範圍 |
+| --- | --- | --- |
+| 銷售 S | 主顧開拓 與 電話約訪 | S1–S2 名單、定聯與約訪 |
+| 銷售 S | 需求分析・找痛點 | S3–S4 初步面談、發掘與深化需求 |
+| 銷售 S | 說明建議書 | S5 建議書呈現、年期與額度 |
+| 銷售 S | 成交與轉介 | S6 反對問題、成交與轉介 |
+| 增員 R | 取得準增名單 與 接觸準增 | R1–R2 名單來源、工作溫度計 25 題 |
+| 增員 R | 一次面談・發掘需求 | R3 判斷推力 |
+| 增員 R | 二次面談・說明事業 | R4 創造拉力 |
+| 增員 R | 決定聘用 與 新人報聘 | R5–R6 380 話術／20分鐘OPP、報聘流程 |
+| 輔導 M | 輔導十字線 | 判斷團隊夥伴所在象限，給出對應輔導方式 |
 
-每個模組的教練規則、方法論與範例個案位於 `content/modules/<模組 ID>/`。模組登錄在 `lib/modules.ts`。
+每個模組的教練規則、方法論與範例個案位於 `content/modules/<模組 ID>/`。模組登錄在 `lib/modules.ts`，同一條線內的教練能看到彼此的框架卡（不跨線），診斷與評分仍只依自己模組的框架卡為準。
 
 ## 使用流程
 
@@ -23,7 +28,13 @@
 
 ## 資料處理與法遵
 
-個案內容會即時送至第三方 AI 服務 Anthropic 進行分析，本軟體本身不設資料庫、也不留存任何對話紀錄——瀏覽器重新整理後，畫面中的對話就會消失（登入狀態除外，見下）。請勿將 AI 建議視為公司核准話術、商品建議或法遵審核結果。
+個案內容會即時送至第三方 AI 服務 Anthropic 進行分析。若有設定 `DATABASE_URL`，每個個案與對話會存進 Postgres，用來產生儀表板（累積個案數、完成率、模組練習次數、最近個案）；沒設定 `DATABASE_URL` 時，教練陪練功能照常可用，只是不留紀錄、儀表板會顯示讀取失敗。請勿將 AI 建議視為公司核准話術、商品建議或法遵審核結果。
+
+## 儀表板與個案記錄
+
+儀表板（側邊欄「儀表板」）顯示累積個案數、完成個案數與完成率、平均分數、待跟進個案、各模組練習次數、最近個案列表。資料表結構在 `db/schema.sql`——首次啟用時，到 Postgres 的 SQL Editor（例如 Neon 後台）貼上整段執行一次建表即可，之後重複執行也安全（`CREATE TABLE IF NOT EXISTS`）。
+
+分數是從教練角色扮演講評的文字裡抓「數字+分」取平均，是盡力而為的擷取，不是結構化評分協議，抓不到分數時個案一樣會標記完成、只是分數留空。
 
 ## 登入與存取控制
 
@@ -43,10 +54,10 @@ cp .env.example .env.local
 npm run dev
 ```
 
-在 `.env.local` 設定 `ANTHROPIC_API_KEY`、`ALLOWED_EMAILS`、`ACCESS_CODE`、`SESSION_SECRET`，然後開啟 http://localhost:3000（會先導到登入頁）。可用 `ANTHROPIC_MODEL` 指定模型。執行 `npm run lint` 做 TypeScript 靜態檢查，執行 `npm run build` 確認建置。
+在 `.env.local` 設定 `ANTHROPIC_API_KEY`、`ALLOWED_EMAILS`、`ACCESS_CODE`、`SESSION_SECRET`（`DATABASE_URL` 選填），然後開啟 http://localhost:3000（會先導到登入頁）。可用 `ANTHROPIC_MODEL` 指定模型。執行 `npm run lint` 做 TypeScript 靜態檢查，執行 `npm run build` 確認建置。
 
 ## 部署
 
-可將 GitHub repo 連接 Vercel，並在部署環境設定 `ANTHROPIC_API_KEY`、`ALLOWED_EMAILS`、`ACCESS_CODE`、`SESSION_SECRET`。不要把這些值提交到 Git。
+可將 GitHub repo 連接 Vercel，並在部署環境設定 `ANTHROPIC_API_KEY`、`ALLOWED_EMAILS`、`ACCESS_CODE`、`SESSION_SECRET`（要用儀表板的話再加 `DATABASE_URL`，例如透過 Vercel 的 Neon 整合自動帶入）。不要把這些值提交到 Git。
 
 正式上線前請確認 Anthropic Console 帳號已經完成付費設定（不是免費評估額度），否則 API 呼叫會失敗或被擋。

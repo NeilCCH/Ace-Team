@@ -2,13 +2,16 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { CoachLine, LINES, MODULES, modulesForLine } from '@/lib/modules';
+import Dashboard from './Dashboard';
 
 type Mode = 'case' | 'roleplay';
+type View = 'coach' | 'dashboard';
 type Message = { role: 'user' | 'assistant'; content: string; isError?: boolean };
 const CASE_LIMIT = 12000;
 const MESSAGE_LIMIT = 4000;
 
 export default function ChatApp() {
+  const [view, setView] = useState<View>('coach');
   const [lineId, setLineId] = useState<CoachLine>(MODULES[0].line);
   const [moduleId, setModuleId] = useState(MODULES[0].id);
   const [caseText, setCaseText] = useState('');
@@ -19,6 +22,7 @@ export default function ChatApp() {
   const [loading, setLoading] = useState(false);
   const [sampleLoading, setSampleLoading] = useState(false);
   const [copied, setCopied] = useState<number | null>(null);
+  const caseIdRef = useRef<number | null>(null);
   const busy = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const module = MODULES.find((item) => item.id === moduleId) ?? MODULES[0];
@@ -43,12 +47,16 @@ export default function ChatApp() {
       const response = await fetch('/api/coach', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ moduleId, mode: nextMode, messages: next.map(({ role, content }) => ({ role, content })) }),
+        body: JSON.stringify({
+          moduleId, mode: nextMode, caseId: caseIdRef.current,
+          messages: next.map(({ role, content }) => ({ role, content })),
+        }),
       });
       const data = await response.json();
       if (!response.ok || typeof data.reply !== 'string') {
         throw new Error(typeof data.error === 'string' ? data.error : '回覆格式異常，請重試。');
       }
+      if (typeof data.caseId === 'number') caseIdRef.current = data.caseId;
       setMessages((previous) => [...previous, { role: 'assistant', content: data.reply }]);
       return true;
     } catch (error) {
@@ -130,6 +138,7 @@ export default function ChatApp() {
     setCaseText('');
     setMode('case');
     setDraft('');
+    caseIdRef.current = null;
   }
 
   async function copy(content: string, index: number) {
@@ -145,18 +154,23 @@ export default function ChatApp() {
   return <div className="app-shell">
     <aside className="sidebar" aria-label="教練模組">
       <div className="brand"><div className="brand-title">銷售 AI 教練</div><div className="brand-sub">業務陪練系統</div></div>
+      <button type="button" className={`dash-nav-btn ${view === 'dashboard' ? 'active' : ''}`} disabled={loading}
+        onClick={() => { if (view !== 'dashboard') { restart(); setView('dashboard'); } }}>儀表板</button>
       <div className="line-tabs" role="tablist" aria-label="選擇訓練線">{LINES.map((line) =>
-        <button type="button" key={line.id} role="tab" aria-selected={line.id === lineId}
-          className={`line-tab ${line.id === lineId ? 'active' : ''}`} disabled={loading}
-          onClick={() => switchLine(line.id)}>{line.name}</button>)}</div>
+        <button type="button" key={line.id} role="tab" aria-selected={line.id === lineId && view === 'coach'}
+          className={`line-tab ${line.id === lineId && view === 'coach' ? 'active' : ''}`} disabled={loading}
+          onClick={() => { setView('coach'); switchLine(line.id); }}>{line.name}</button>)}</div>
       <nav className="module-list" aria-label="選擇模組">{lineModules.map((item) =>
-        <button type="button" key={item.id} className={`module-item ${item.id === moduleId ? 'active' : ''}`}
-          disabled={!item.enabled || loading} aria-current={item.id === moduleId ? 'page' : undefined}
-          onClick={() => { restart(); setModuleId(item.id); }}>
+        <button type="button" key={item.id} className={`module-item ${item.id === moduleId && view === 'coach' ? 'active' : ''}`}
+          disabled={!item.enabled || loading} aria-current={item.id === moduleId && view === 'coach' ? 'page' : undefined}
+          onClick={() => { restart(); setView('coach'); setModuleId(item.id); }}>
           <span className="module-name">{item.name}</span><span className="module-tagline">{item.tagline}</span>
         </button>)}</nav>
     </aside>
-    <main className="main">
+    {view === 'dashboard' ? <main className="main">
+      <header className="main-header"><div><span className="eyebrow">業務員總覽</span><h1>儀表板</h1></div></header>
+      <Dashboard />
+    </main> : <main className="main">
       <header className="main-header"><div><span className="eyebrow">互動教練</span><h1>{module.name}</h1></div>
         {started && <div className="header-controls"><span className="mode-badge">{mode === 'roleplay' ? '角色扮演中' : '個案分析'}</span>
           <button type="button" className="ghost-btn" disabled={loading} onClick={restart}>換一個個案</button></div>}</header>
@@ -191,6 +205,6 @@ export default function ChatApp() {
           <button type="button" className="primary-btn" onClick={send} disabled={loading || !draft.trim()}>送出</button></div>
         <p className="keyboard-hint">⌘ / Ctrl + Enter 送出 · Enter 換行</p>
       </>}
-    </main>
+    </main>}
   </div>;
 }
