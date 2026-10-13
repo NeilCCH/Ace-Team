@@ -135,7 +135,7 @@ export default function ChatApp() {
 
   return <div className="app-shell">
     <aside className="sidebar" aria-label="教練模組">
-      <div className="brand"><div className="brand-title">銷售 AI 教練</div><div className="brand-sub">公勝保經 · 高雄業務中心</div></div>
+      <div className="brand"><div className="brand-title">銷售 AI 教練</div><div className="brand-sub">業務陪練系統</div></div>
       <nav className="module-list" aria-label="選擇模組">{MODULES.map((item) =>
         <button type="button" key={item.id} className={`module-item ${item.id === moduleId ? 'active' : ''}`}
           disabled={!item.enabled || loading} aria-current={item.id === moduleId ? 'page' : undefined}

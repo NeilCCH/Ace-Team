@@ -4,7 +4,7 @@ import ServiceWorkerRegister from './ServiceWorkerRegister';
 
 export const metadata: Metadata = {
   title: '銷售 AI 教練',
-  description: '公勝保經高雄業務中心 · 個案分析陪練',
+  description: '個案分析陪練系統',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',

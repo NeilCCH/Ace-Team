@@ -41,7 +41,7 @@ function LoginForm() {
     <div className="login-wrap">
       <form className="login-card" onSubmit={handleSubmit}>
         <h1>銷售 AI 教練</h1>
-        <p className="login-sub">公勝保經高雄業務中心 · 內部陪練系統</p>
+        <p className="login-sub">內部陪練系統</p>
         <label className="login-field">
           <span>帳號（Email）</span>
           <input
