@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { MODULES } from './modules';
+import { getModule, modulesForLine } from './modules';
 
 const CONTENT_ROOT = path.join(process.cwd(), 'content', 'modules');
 
@@ -19,10 +19,14 @@ export function buildSystemPrompt(moduleId: string, mode: CoachMode): string {
   const skill = readContentFile(moduleId, 'skill.md');
   const framework = readContentFile(moduleId, 'framework.md');
 
-  // 讓教練熟悉整個 S 線其他階段的框架卡，避免對話自然帶到下一階段內容時
-  // 只能拒答——但診斷、評分、判斷是否完成這個階段，一律只依上面這個模組
-  // 自己的框架卡與技能設定為準，不能用這份參考資料取代其他模組的完整陪練。
-  const otherModules = MODULES.filter((m) => m.id !== moduleId && m.enabled);
+  // 讓教練熟悉同一條線（S／R／M）其他階段的框架卡，避免對話自然帶到下一
+  // 階段內容時只能拒答——但診斷、評分、判斷是否完成這個階段，一律只依
+  // 上面這個模組自己的框架卡與技能設定為準，不能用這份參考資料取代其他
+  // 模組的完整陪練；也不跨線夾帶（銷售教練不需要增員或輔導的框架卡）。
+  const currentModule = getModule(moduleId);
+  const otherModules = currentModule
+    ? modulesForLine(currentModule.line).filter((m) => m.id !== moduleId && m.enabled)
+    : [];
   const crossModuleRef = otherModules.length
     ? [
         '# 其他模組參考資料（跨模組知識，僅供你理解整個銷售流程的上下文）',

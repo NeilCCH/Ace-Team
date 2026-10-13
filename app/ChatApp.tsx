@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { MODULES } from '@/lib/modules';
+import { CoachLine, LINES, MODULES, modulesForLine } from '@/lib/modules';
 
 type Mode = 'case' | 'roleplay';
 type Message = { role: 'user' | 'assistant'; content: string; isError?: boolean };
@@ -9,6 +9,7 @@ const CASE_LIMIT = 12000;
 const MESSAGE_LIMIT = 4000;
 
 export default function ChatApp() {
+  const [lineId, setLineId] = useState<CoachLine>(MODULES[0].line);
   const [moduleId, setModuleId] = useState(MODULES[0].id);
   const [caseText, setCaseText] = useState('');
   const [started, setStarted] = useState(false);
@@ -21,6 +22,14 @@ export default function ChatApp() {
   const busy = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const module = MODULES.find((item) => item.id === moduleId) ?? MODULES[0];
+  const lineModules = modulesForLine(lineId);
+
+  function switchLine(nextLine: CoachLine) {
+    if (nextLine === lineId || busy.current) return;
+    restart();
+    setLineId(nextLine);
+    setModuleId(modulesForLine(nextLine)[0].id);
+  }
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -136,7 +145,11 @@ export default function ChatApp() {
   return <div className="app-shell">
     <aside className="sidebar" aria-label="教練模組">
       <div className="brand"><div className="brand-title">銷售 AI 教練</div><div className="brand-sub">業務陪練系統</div></div>
-      <nav className="module-list" aria-label="選擇模組">{MODULES.map((item) =>
+      <div className="line-tabs" role="tablist" aria-label="選擇訓練線">{LINES.map((line) =>
+        <button type="button" key={line.id} role="tab" aria-selected={line.id === lineId}
+          className={`line-tab ${line.id === lineId ? 'active' : ''}`} disabled={loading}
+          onClick={() => switchLine(line.id)}>{line.name}</button>)}</div>
+      <nav className="module-list" aria-label="選擇模組">{lineModules.map((item) =>
         <button type="button" key={item.id} className={`module-item ${item.id === moduleId ? 'active' : ''}`}
           disabled={!item.enabled || loading} aria-current={item.id === moduleId ? 'page' : undefined}
           onClick={() => { restart(); setModuleId(item.id); }}>
