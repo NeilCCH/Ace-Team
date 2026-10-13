@@ -2,7 +2,6 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { SESSION_COOKIE, verifySession } from '@/lib/auth';
 import ChatApp from './ChatApp';
-import LogoutButton from './LogoutButton';
 
 export default async function Page() {
   const cookieStore = await cookies();
@@ -12,13 +11,5 @@ export default async function Page() {
   // middleware matcher is ever reconfigured to exclude it.
   if (!email) redirect('/login');
 
-  return (
-    <>
-      <div className="session-bar">
-        <span className="session-email">{email}</span>
-        <LogoutButton />
-      </div>
-      <ChatApp />
-    </>
-  );
+  return <ChatApp email={email} />;
 }

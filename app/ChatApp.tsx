@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { CoachLine, LINES, MODULES, modulesForLine } from '@/lib/modules';
 import Dashboard from './Dashboard';
+import LogoutButton from './LogoutButton';
 
 type Mode = 'case' | 'roleplay';
 type View = 'coach' | 'dashboard';
@@ -10,7 +11,7 @@ type Message = { role: 'user' | 'assistant'; content: string; isError?: boolean 
 const CASE_LIMIT = 12000;
 const MESSAGE_LIMIT = 4000;
 
-export default function ChatApp() {
+export default function ChatApp({ email }: { email: string }) {
   const [view, setView] = useState<View>('coach');
   const [lineId, setLineId] = useState<CoachLine>(MODULES[0].line);
   const [moduleId, setModuleId] = useState(MODULES[0].id);
@@ -153,7 +154,10 @@ export default function ChatApp() {
 
   return <div className="app-shell">
     <aside className="sidebar" aria-label="教練模組">
-      <div className="brand"><div className="brand-title">銷售 AI 教練</div><div className="brand-sub">業務陪練系統</div></div>
+      <div className="brand">
+        <img src="/icon-192.png" alt="" width={32} height={32} className="brand-mark" />
+        <div><div className="brand-title">銷售教練</div><div className="brand-sub">MENTOR</div></div>
+      </div>
       <button type="button" className={`dash-nav-btn ${view === 'dashboard' ? 'active' : ''}`} disabled={loading}
         onClick={() => { if (view !== 'dashboard') { restart(); setView('dashboard'); } }}>儀表板</button>
       <div className="line-tabs" role="tablist" aria-label="選擇訓練線">{LINES.map((line) =>
@@ -166,6 +170,12 @@ export default function ChatApp() {
           onClick={() => { restart(); setView('coach'); setModuleId(item.id); }}>
           <span className="module-name">{item.name}</span><span className="module-tagline">{item.tagline}</span>
         </button>)}</nav>
+      <div className="sidebar-spacer" />
+      <div className="sidebar-footer">
+        <div className="sidebar-avatar" aria-hidden="true">{email.charAt(0).toUpperCase()}</div>
+        <span className="sidebar-email" title={email}>{email}</span>
+        <LogoutButton />
+      </div>
     </aside>
     {view === 'dashboard' ? <main className="main">
       <header className="main-header"><div><span className="eyebrow">業務員總覽</span><h1>儀表板</h1></div></header>
