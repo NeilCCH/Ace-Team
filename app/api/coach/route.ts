@@ -22,9 +22,74 @@ function extractScore(reply: string): number | null {
   return Math.round(matches.reduce((sum, n) => sum + n, 0) / matches.length);
 }
 
+// 目前只支援圖片附件（拍紙本資料最常見的情境）。PDF/文件附件需要較新版本的
+// Anthropic SDK（這個repo目前是0.32.1，還沒有document content block的型別），
+// 之後真的有需求再評估升級SDK、加回文件支援。
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const MAX_ATTACHMENTS_PER_MESSAGE = 4;
+// base64 解碼後的位元組數上限；對應前端 5MB 的原始檔案上限，留一點餘裕。
+const MAX_ATTACHMENT_BYTES = 7 * 1024 * 1024;
+// 有附件的請求，JSON payload 可能輕易超過純文字對話的大小，拉高上限。
+const MAX_PAYLOAD_BYTES = 20 * 1024 * 1024;
+
+interface Attachment {
+  name: string;
+  mediaType: string;
+  data: string;
+}
+
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
+  attachments?: Attachment[];
+}
+
+function base64ByteLength(b64: string): number {
+  const clean = b64.replace(/=+$/, '');
+  return Math.floor((clean.length * 3) / 4);
+}
+
+function isValidAttachment(a: unknown): a is Attachment {
+  if (!a || typeof a !== 'object') return false;
+  const { name, mediaType, data } = a as Record<string, unknown>;
+  if (typeof name !== 'string' || typeof mediaType !== 'string' || typeof data !== 'string') return false;
+  if (!ALLOWED_IMAGE_TYPES.includes(mediaType)) return false;
+  if (!/^[A-Za-z0-9+/]+=*$/.test(data) || data.length === 0) return false;
+  if (base64ByteLength(data) > MAX_ATTACHMENT_BYTES) return false;
+  return true;
+}
+
+function isValidMessage(message: unknown): message is ChatMessage {
+  if (!message || typeof message !== 'object') return false;
+  const m = message as ChatMessage;
+  if (m.role !== 'user' && m.role !== 'assistant') return false;
+  if (typeof m.content !== 'string' || m.content.length > 12000) return false;
+  if (m.attachments !== undefined) {
+    if (!Array.isArray(m.attachments) || m.attachments.length > MAX_ATTACHMENTS_PER_MESSAGE) return false;
+    if (!m.attachments.every(isValidAttachment)) return false;
+  }
+  // 純文字訊息仍要求非空白；帶附件時允許只有圖片、沒有文字說明。
+  if (m.content.trim().length === 0 && (!m.attachments || m.attachments.length === 0)) return false;
+  return true;
+}
+
+type UserContentBlock = Anthropic.ImageBlockParam | Anthropic.TextBlockParam;
+
+function toAnthropicContent(message: ChatMessage): string | UserContentBlock[] {
+  if (!message.attachments || message.attachments.length === 0) return message.content;
+  const blocks: UserContentBlock[] = message.attachments.map((a) => ({
+    type: 'image',
+    source: { type: 'base64', media_type: a.mediaType as 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif', data: a.data },
+  }));
+  if (message.content.trim()) blocks.push({ type: 'text', text: message.content });
+  return blocks;
+}
+
+// 附件本身的 base64 內容不存進資料庫（避免資料庫被圖片塞爆），只記錄檔名提示。
+function toPersistedText(message: ChatMessage): string {
+  const names = (message.attachments ?? []).map((a) => a.name).join('、');
+  if (!message.content.trim()) return names ? `[附件：${names}]` : '';
+  return names ? `${message.content}\n[附件：${names}]` : message.content;
 }
 
 export async function POST(req: NextRequest) {
@@ -50,16 +115,14 @@ export async function POST(req: NextRequest) {
   if (!Array.isArray(messages) || messages.length === 0 || messages.length > 80) {
     return NextResponse.json({ error: '缺少對話內容。' }, { status: 400 });
   }
-  if (!messages.every((message: unknown) =>
-    message && typeof message === 'object' &&
-    ((message as ChatMessage).role === 'user' || (message as ChatMessage).role === 'assistant') &&
-    typeof (message as ChatMessage).content === 'string' &&
-    (message as ChatMessage).content.trim().length > 0 &&
-    (message as ChatMessage).content.length <= 12000
-  ) || messages[0].role !== 'user' || messages[messages.length - 1].role !== 'user') {
-    return NextResponse.json({ error: '對話格式或內容長度無效。' }, { status: 400 });
+  if (
+    !messages.every(isValidMessage) ||
+    (messages[0] as ChatMessage).role !== 'user' ||
+    (messages[messages.length - 1] as ChatMessage).role !== 'user'
+  ) {
+    return NextResponse.json({ error: '對話格式、內容長度或附件格式無效。' }, { status: 400 });
   }
-  if (JSON.stringify(messages).length > 100000) {
+  if (Buffer.byteLength(JSON.stringify(messages), 'utf-8') > MAX_PAYLOAD_BYTES) {
     return NextResponse.json({ error: '對話內容過長。' }, { status: 413 });
   }
 
@@ -85,14 +148,15 @@ export async function POST(req: NextRequest) {
 
   const anthropic = new Anthropic({ apiKey });
   const system = buildSystemPrompt(moduleId, mode as CoachMode);
-  const lastUserMessage = messages[messages.length - 1] as ChatMessage;
+  const typedMessages = messages as ChatMessage[];
+  const lastUserMessage = typedMessages[typedMessages.length - 1];
 
   try {
     const response = await anthropic.messages.create({
       model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-5',
       max_tokens: 2000,
       system,
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      messages: typedMessages.map((m) => ({ role: m.role, content: toAnthropicContent(m) })),
     });
 
     const reply = response.content
@@ -104,15 +168,16 @@ export async function POST(req: NextRequest) {
     let effectiveCaseId = caseId;
     if (userEmail) {
       try {
+        const persistedText = toPersistedText(lastUserMessage);
         if (effectiveCaseId === null) {
-          const created = await createCase(userEmail, moduleId, module.line, lastUserMessage.content);
+          const created = await createCase(userEmail, moduleId, module.line, persistedText);
           effectiveCaseId = created.id;
         } else {
-          await appendMessage(effectiveCaseId, 'user', lastUserMessage.content);
+          await appendMessage(effectiveCaseId, 'user', persistedText);
         }
         await appendMessage(effectiveCaseId, 'assistant', reply);
         if (lastUserMessage.content.startsWith(FINISH_MESSAGE_PREFIX)) {
-          await completeCase(effectiveCaseId, extractScore(reply), lastUserMessage.content.slice(0, 200));
+          await completeCase(effectiveCaseId, extractScore(reply), persistedText.slice(0, 200));
         }
       } catch (dbErr) {
         console.error('case persistence error', dbErr);

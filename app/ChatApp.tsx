@@ -7,9 +7,23 @@ import LogoutButton from './LogoutButton';
 
 type Mode = 'case' | 'roleplay';
 type View = 'coach' | 'dashboard';
-type Message = { role: 'user' | 'assistant'; content: string; isError?: boolean };
+type Attachment = { name: string; mediaType: string; data: string };
+type Message = { role: 'user' | 'assistant'; content: string; attachments?: Attachment[]; isError?: boolean };
 const CASE_LIMIT = 12000;
 const MESSAGE_LIMIT = 4000;
+const MAX_ATTACHMENTS = 4;
+const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+// 目前只支援圖片（拍紙本資料最常見的情境）；PDF需要升級Anthropic SDK才能支援，見route.ts註解。
+const ACCEPTED_ATTACHMENT_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve((reader.result as string).split(',')[1] ?? '');
+    reader.onerror = () => reject(new Error('讀取檔案失敗'));
+    reader.readAsDataURL(file);
+  });
+}
 
 export default function ChatApp({ email }: { email: string }) {
   const [view, setView] = useState<View>('coach');
@@ -23,9 +37,12 @@ export default function ChatApp({ email }: { email: string }) {
   const [loading, setLoading] = useState(false);
   const [sampleLoading, setSampleLoading] = useState(false);
   const [copied, setCopied] = useState<number | null>(null);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [attachError, setAttachError] = useState<string | null>(null);
   const caseIdRef = useRef<number | null>(null);
   const busy = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const module = MODULES.find((item) => item.id === moduleId) ?? MODULES[0];
   const lineModules = modulesForLine(lineId);
 
@@ -40,6 +57,34 @@ export default function ChatApp({ email }: { email: string }) {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, loading]);
 
+  async function handleFiles(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return;
+    setAttachError(null);
+    const room = MAX_ATTACHMENTS - attachments.length;
+    const files = Array.from(fileList).slice(0, Math.max(room, 0));
+    if (fileList.length > files.length) setAttachError(`最多同時附加 ${MAX_ATTACHMENTS} 個檔案。`);
+    for (const file of files) {
+      if (!ACCEPTED_ATTACHMENT_TYPES.includes(file.type)) {
+        setAttachError(`不支援的檔案格式：${file.name}`);
+        continue;
+      }
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        setAttachError(`檔案太大（超過 5MB）：${file.name}`);
+        continue;
+      }
+      try {
+        const data = await fileToBase64(file);
+        setAttachments((prev) => [...prev, { name: file.name, mediaType: file.type, data }]);
+      } catch {
+        setAttachError(`讀取失敗：${file.name}`);
+      }
+    }
+  }
+
+  function removeAttachment(index: number) {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
+  }
+
   async function askCoach(next: Message[], nextMode: Mode) {
     if (busy.current) return;
     busy.current = true;
@@ -50,7 +95,7 @@ export default function ChatApp({ email }: { email: string }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           moduleId, mode: nextMode, caseId: caseIdRef.current,
-          messages: next.map(({ role, content }) => ({ role, content })),
+          messages: next.map(({ role, content, attachments: atts }) => ({ role, content, attachments: atts })),
         }),
       });
       const data = await response.json();
@@ -86,18 +131,23 @@ export default function ChatApp({ email }: { email: string }) {
   }
 
   function startCase() {
-    if (!caseText.trim() || busy.current) return;
-    const first: Message = { role: 'user', content: caseText.trim() };
+    if ((!caseText.trim() && attachments.length === 0) || busy.current) return;
+    const first: Message = { role: 'user', content: caseText.trim(), attachments: attachments.length ? attachments : undefined };
     setStarted(true);
     setMessages([first]);
+    setAttachments([]);
+    setAttachError(null);
     void askCoach([first], 'case');
   }
 
   function send() {
-    if (!draft.trim() || busy.current) return;
-    const next: Message[] = [...messages.filter((item) => !item.isError), { role: 'user', content: draft.trim() }];
+    if ((!draft.trim() && attachments.length === 0) || busy.current) return;
+    const next: Message[] = [...messages.filter((item) => !item.isError),
+      { role: 'user', content: draft.trim(), attachments: attachments.length ? attachments : undefined }];
     setMessages(next);
     setDraft('');
+    setAttachments([]);
+    setAttachError(null);
     void askCoach(next, mode);
   }
 
@@ -139,6 +189,8 @@ export default function ChatApp({ email }: { email: string }) {
     setCaseText('');
     setMode('case');
     setDraft('');
+    setAttachments([]);
+    setAttachError(null);
     caseIdRef.current = null;
   }
 
@@ -151,6 +203,22 @@ export default function ChatApp({ email }: { email: string }) {
       window.alert('無法複製，請檢查剪貼簿權限。');
     }
   }
+
+  const attachmentPicker = <div className="attach-row">
+    <input ref={fileInputRef} type="file" multiple hidden accept={ACCEPTED_ATTACHMENT_TYPES.join(',')}
+      onChange={(event) => { void handleFiles(event.target.files); event.target.value = ''; }} />
+    <button type="button" className="attach-btn" disabled={loading || attachments.length >= MAX_ATTACHMENTS}
+      onClick={() => fileInputRef.current?.click()}>＋ 附加圖片</button>
+    {attachments.length > 0 && <ul className="attach-list">
+      {attachments.map((a, i) => <li key={i} className="attach-chip">
+        <img src={`data:${a.mediaType};base64,${a.data}`} alt="" className="attach-thumb" />
+        <span className="attach-name" title={a.name}>{a.name}</span>
+        <button type="button" className="attach-remove" aria-label={`移除 ${a.name}`} disabled={loading}
+          onClick={() => removeAttachment(i)}>×</button>
+      </li>)}
+    </ul>}
+    {attachError && <p className="attach-error">{attachError}</p>}
+  </div>;
 
   return <div className="app-shell">
     <aside className="sidebar" aria-label="教練模組">
@@ -192,12 +260,18 @@ export default function ChatApp({ email }: { email: string }) {
           placeholder="例如：客戶約 40 歲，有兩名子女；擔心收入中斷。上次談到保費時說「我想再想想」。我想練習如何回應。"
           onChange={(event) => setCaseText(event.target.value)} />
         <div className="input-meta">{caseText.length.toLocaleString()} / {CASE_LIMIT.toLocaleString()} 字</div>
+        {attachmentPicker}
         <div className="action-row"><button type="button" className="ghost-btn" onClick={loadSample} disabled={sampleLoading}>{sampleLoading ? '載入中…' : '載入範例個案'}</button>
-          <button type="button" className="primary-btn" onClick={startCase} disabled={!caseText.trim() || loading}>開始個案分析</button></div>
+          <button type="button" className="primary-btn" onClick={startCase} disabled={(!caseText.trim() && attachments.length === 0) || loading}>開始個案分析</button></div>
       </section> : <>
         <div className="chat-scroll" ref={scrollRef} role="log" aria-live="polite" aria-relevant="additions text">
           {messages.map((item, index) => <div key={index} className={`bubble-row ${item.role}`}>
-            <div className={`bubble ${item.role} ${item.isError ? 'error' : ''}`}><div>{item.content}</div>
+            <div className={`bubble ${item.role} ${item.isError ? 'error' : ''}`}>
+              {item.attachments && item.attachments.length > 0 && <div className="bubble-attachments">
+                {item.attachments.map((a, i) =>
+                  <img key={i} src={`data:${a.mediaType};base64,${a.data}`} alt={a.name} className="bubble-attach-thumb" />)}
+              </div>}
+              {item.content && <div>{item.content}</div>}
               {item.role === 'assistant' && <div className="bubble-actions">
                 {item.isError ? <button type="button" onClick={retry} disabled={loading}>重試</button> :
                   <button type="button" onClick={() => copy(item.content, index)}>{copied === index ? '已複製' : '複製回覆'}</button>}
@@ -207,12 +281,13 @@ export default function ChatApp({ email }: { email: string }) {
         <div className="conversation-actions">{mode === 'case' ?
           <button type="button" className="ghost-btn" disabled={loading} onClick={beginRoleplay}>開始角色扮演</button> :
           <button type="button" className="ghost-btn" disabled={loading} onClick={finishRoleplay}>結束對練並取得講評</button>}</div>
+        {attachmentPicker}
         <div className="composer"><label className="sr-only" htmlFor="chat-draft">輸入訊息</label>
           <textarea id="chat-draft" rows={2} maxLength={MESSAGE_LIMIT} value={draft}
             placeholder={mode === 'roleplay' ? '對客戶說一句話…' : '回覆教練，或請他示範話術…'}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); send(); } }} />
-          <button type="button" className="primary-btn" onClick={send} disabled={loading || !draft.trim()}>送出</button></div>
+          <button type="button" className="primary-btn" onClick={send} disabled={loading || (!draft.trim() && attachments.length === 0)}>送出</button></div>
         <p className="keyboard-hint">⌘ / Ctrl + Enter 送出 · Enter 換行</p>
       </>}
     </main>}
