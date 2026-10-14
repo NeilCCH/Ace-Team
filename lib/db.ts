@@ -4,9 +4,12 @@ let pool: Pool | null = null;
 
 export function getPool(): Pool {
   if (!pool) {
-    const connectionString = process.env.DATABASE_URL;
+    // Vercel 的 Neon 整合依當初設定的 custom prefix 命名環境變數（這個專案是
+    // POSTGRES_*，不是 DATABASE_URL），所以兩個都接受；POSTGRES_URL 是
+    // pgbouncer 連線池版本，適合 serverless 短生命週期的函式。
+    const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
     if (!connectionString) {
-      throw new Error('尚未設定 DATABASE_URL，儀表板與個案記錄功能無法使用。');
+      throw new Error('尚未設定 DATABASE_URL 或 POSTGRES_URL，儀表板與個案記錄功能無法使用。');
     }
     pool = new Pool({ connectionString, ssl: { rejectUnauthorized: false } });
   }

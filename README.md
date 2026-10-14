@@ -65,6 +65,8 @@ npm run dev
 
 ## 部署
 
-可將 GitHub repo 連接 Vercel，並在部署環境設定 `ANTHROPIC_API_KEY`、`ALLOWED_EMAILS`、`ACCESS_CODE`、`SESSION_SECRET`（要用儀表板的話再加 `DATABASE_URL`，例如透過 Vercel 的 Neon 整合自動帶入）。不要把這些值提交到 Git。
+可將 GitHub repo 連接 Vercel，並在部署環境設定 `ANTHROPIC_API_KEY`、`ALLOWED_EMAILS`、`ACCESS_CODE`、`SESSION_SECRET`（要用儀表板的話再加資料庫連線字串，見下方）。不要把這些值提交到 Git。
+
+**透過 Vercel 的 Neon 整合連接資料庫時**：程式碼會依序找 `DATABASE_URL`、`POSTGRES_URL` 這兩個環境變數，用找到的第一個。Neon 整合實際建立的變數名稱依當初設定的 custom prefix 而定——不一定是 `DATABASE_URL`，連完後務必到 Vercel 專案的 **Settings → Environments → Production** 裡確認真正的變數名稱（例如 `POSTGRES_URL`），並且 **新增/修改環境變數後要重新部署（Deployments → 最新那筆 → Redeploy）才會生效**，光是在設定頁存檔不會讓已經部署的函式讀到新變數。
 
 正式上線前請確認 Anthropic Console 帳號已經完成付費設定（不是免費評估額度），否則 API 呼叫會失敗或被擋。
