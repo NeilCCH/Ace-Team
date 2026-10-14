@@ -309,3 +309,11 @@ export async function decideUserAccount(
   );
   return rows[0] ? toUserAccount(rows[0]) : null;
 }
+
+// 刪除帳號申請紀錄（整列移除，密碼／安全問題一起清掉）。不動 cases／
+// case_messages——帳號刪掉了，但這個人練習過的歷史紀錄還是保留著，當作
+// 稽核與統計用，不會因為帳號被刪而憑空消失。
+export async function deleteUserAccount(email: string): Promise<boolean> {
+  const { rowCount } = await getPool().query(`DELETE FROM users WHERE email = $1`, [email]);
+  return (rowCount ?? 0) > 0;
+}

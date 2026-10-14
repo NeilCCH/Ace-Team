@@ -966,6 +966,11 @@ textarea.case-input {
   flex-shrink: 0;
 }
 
+.admin-delete-btn {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
 .dash-wrap {
   flex: 1;
   overflow-y: auto;

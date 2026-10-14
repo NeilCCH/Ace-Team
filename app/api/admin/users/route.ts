@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { SESSION_COOKIE, verifySession, isAdminEmail } from '@/lib/auth';
-import { decideUserAccount, listUserAccounts, setUserPassword } from '@/lib/db';
+import { decideUserAccount, deleteUserAccount, listUserAccounts, setUserPassword } from '@/lib/db';
 import { hashPassword, isValidPassword } from '@/lib/password';
 
 export const runtime = 'nodejs';
@@ -73,5 +73,36 @@ export async function PATCH(req: NextRequest) {
   } catch (err) {
     console.error('admin reset password error', err);
     return NextResponse.json({ error: '重設失敗。' }, { status: 500 });
+  }
+}
+
+// 刪除帳號申請紀錄（不限狀態，待審核／已開通／已拒絕都可以刪）。不會動到
+// 這個人練習過的個案記錄。
+export async function DELETE(req: NextRequest) {
+  const admin = await requireAdmin(req);
+  if (!admin) return NextResponse.json({ error: '沒有權限。' }, { status: 403 });
+
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: '請提供有效的 JSON。' }, { status: 400 });
+  }
+  const { email } = (body ?? {}) as Record<string, unknown>;
+  if (typeof email !== 'string' || !email.trim()) {
+    return NextResponse.json({ error: '參數無效。' }, { status: 400 });
+  }
+  const normalizedEmail = email.trim().toLowerCase();
+  if (normalizedEmail === admin) {
+    return NextResponse.json({ error: '不能刪除自己目前登入的這個帳號。' }, { status: 400 });
+  }
+
+  try {
+    const deleted = await deleteUserAccount(normalizedEmail);
+    if (!deleted) return NextResponse.json({ error: '找不到這個帳號申請。' }, { status: 404 });
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error('admin delete user error', err);
+    return NextResponse.json({ error: '刪除失敗。' }, { status: 500 });
   }
 }
