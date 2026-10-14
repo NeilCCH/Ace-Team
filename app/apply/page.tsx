@@ -6,6 +6,8 @@ export default function ApplyPage() {
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [note, setNote] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -13,14 +15,22 @@ export default function ApplyPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (loading) return;
-    setLoading(true);
     setError('');
     setMessage('');
+    if (password.length < 8) {
+      setError('密碼至少需要 8 個字元。');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('兩次輸入的密碼不一致。');
+      return;
+    }
+    setLoading(true);
     try {
       const res = await fetch('/api/apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, name, note }),
+        body: JSON.stringify({ email, name, note, password }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -39,7 +49,7 @@ export default function ApplyPage() {
     <div className="login-wrap">
       <form className="login-card" onSubmit={handleSubmit}>
         <h1>申請帳號</h1>
-        <p className="login-sub">送出後請等候管理員在後台開通，開通後再回登入頁登入</p>
+        <p className="login-sub">送出後請等候管理員開通；這裡設定的密碼就是之後登入要用的密碼，開通後直接回登入頁用這組帳密登入</p>
         {message ? (
           <div className="apply-success">{message}</div>
         ) : (
@@ -72,6 +82,28 @@ export default function ApplyPage() {
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 placeholder="例如：所屬單位、誰介紹的"
+              />
+            </label>
+            <label className="login-field">
+              <span>設定密碼</span>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="至少 8 個字元"
+                autoComplete="new-password"
+                required
+              />
+            </label>
+            <label className="login-field">
+              <span>確認密碼</span>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="再輸入一次"
+                autoComplete="new-password"
+                required
               />
             </label>
             {error && <div className="login-error">{error}</div>}

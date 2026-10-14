@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isAdminEmail, signSession, SESSION_COOKIE, SESSION_MAX_AGE_SECONDS } from '@/lib/auth';
-import { getUserAccount } from '@/lib/db';
+import { getPasswordHash, getUserAccount } from '@/lib/db';
+import { verifyPassword } from '@/lib/password';
 
 export const runtime = 'nodejs';
 
@@ -12,11 +13,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '請提供有效的 JSON。' }, { status: 400 });
   }
   if (!body || typeof body !== 'object') {
-    return NextResponse.json({ error: '請輸入帳號與驗證碼。' }, { status: 400 });
+    return NextResponse.json({ error: '請輸入帳號與密碼。' }, { status: 400 });
   }
-  const { email, code } = body as Record<string, unknown>;
-  if (typeof email !== 'string' || !email.trim() || typeof code !== 'string' || !code) {
-    return NextResponse.json({ error: '請輸入帳號與驗證碼。' }, { status: 400 });
+  const { email, password } = body as Record<string, unknown>;
+  if (typeof email !== 'string' || !email.trim() || typeof password !== 'string' || !password) {
+    return NextResponse.json({ error: '請輸入帳號與密碼。' }, { status: 400 });
   }
 
   const accessCode = process.env.ACCESS_CODE;
@@ -27,22 +28,22 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (code !== accessCode) {
-    return NextResponse.json({ error: '帳號或驗證碼不正確。' }, { status: 401 });
-  }
-
   const normalizedEmail = email.trim().toLowerCase();
+  const genericError = () => NextResponse.json({ error: '帳號或密碼不正確。' }, { status: 401 });
 
-  // 管理員（ALLOWED_EMAILS）一律放行，不受申請／開通流程限制，避免雞生蛋問題。
-  // 其他帳號要先申請（/apply）、經管理員在稽核後台開通（status = approved）才能登入。
-  if (!isAdminEmail(normalizedEmail)) {
+  if (isAdminEmail(normalizedEmail)) {
+    // 管理員：已經設定過個人密碼就只認個人密碼；還沒設定過，ACCESS_CODE
+    // 當作一次性的開通密碼，登入後建議去「更改密碼」設一組自己的。
+    const existingHash = await getPasswordHash(normalizedEmail).catch(() => null);
+    const ok = existingHash ? await verifyPassword(password, existingHash) : password === accessCode;
+    if (!ok) return genericError();
+  } else {
+    // 一般使用者：一定要先申請（/apply）、經管理員開通（status=approved），
+    // 且密碼要對得上申請時自己設定的那組。
     const account = await getUserAccount(normalizedEmail).catch(() => null);
-    if (!account || account.status !== 'approved') {
-      return NextResponse.json(
-        { error: '帳號或驗證碼不正確，或帳號尚未經管理員開通。' },
-        { status: 401 },
-      );
-    }
+    if (!account || account.status !== 'approved') return genericError();
+    const existingHash = await getPasswordHash(normalizedEmail).catch(() => null);
+    if (!existingHash || !(await verifyPassword(password, existingHash))) return genericError();
   }
 
   const token = await signSession(normalizedEmail);

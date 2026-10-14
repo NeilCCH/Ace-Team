@@ -25,18 +25,22 @@ CREATE INDEX IF NOT EXISTS idx_cases_user_email ON cases(user_email);
 CREATE INDEX IF NOT EXISTS idx_cases_user_updated ON cases(user_email, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_case_messages_case_id ON case_messages(case_id);
 
--- 帳號申請與開通。ADMIN_EMAILS 環境變數列的帳號不受此表限制，一律可登入
--- （開通別人帳號的人本身不能卡在「等人開通」的雞生蛋問題）；其他 email
--- 一定要先申請、狀態是 approved 才能登入。
+-- 帳號申請與開通。ALLOWED_EMAILS 環境變數列的帳號（管理員）不受此表限制，
+-- 一律可登入（開通別人帳號的人本身不能卡在「等人開通」的雞生蛋問題）；
+-- 其他 email 一定要先申請、狀態是 approved、且密碼正確才能登入。
 CREATE TABLE IF NOT EXISTS users (
   id BIGSERIAL PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,
   name TEXT,
   note TEXT,
+  password_hash TEXT,
   status TEXT NOT NULL DEFAULT 'pending', -- pending | approved | rejected
   requested_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   decided_at TIMESTAMPTZ,
   decided_by TEXT
 );
+
+-- 如果是舊資料庫、users 表已經存在但沒有 password_hash 欄位，補上去。
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);

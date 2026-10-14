@@ -7,7 +7,7 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -20,7 +20,7 @@ function LoginForm() {
       const res = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, code }),
+        body: JSON.stringify({ email, password }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -54,12 +54,12 @@ function LoginForm() {
           />
         </label>
         <label className="login-field">
-          <span>存取碼</span>
+          <span>密碼</span>
           <input
             type="password"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            placeholder="向管理員索取"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="你的個人密碼"
             autoComplete="current-password"
             required
           />

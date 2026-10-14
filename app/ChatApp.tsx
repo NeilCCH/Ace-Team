@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { CoachLine, LINES, MODULES, modulesForLine } from '@/lib/modules';
 import Dashboard from './Dashboard';
+import ChangePassword from './ChangePassword';
 import LogoutButton from './LogoutButton';
 
 type Mode = 'case' | 'roleplay';
-type View = 'coach' | 'dashboard';
+type View = 'coach' | 'dashboard' | 'account';
 type Attachment = { name: string; mediaType: string; data: string };
 type Message = { role: 'user' | 'assistant'; content: string; attachments?: Attachment[]; isError?: boolean };
 const CASE_LIMIT = 12000;
@@ -241,12 +242,21 @@ export default function ChatApp({ email, isAdmin }: { email: string; isAdmin: bo
       {isAdmin && <a href="/admin" className="dash-nav-btn admin-nav-link">帳號審核後台</a>}
       <div className="sidebar-spacer" />
       <div className="sidebar-footer">
-        <div className="sidebar-avatar" aria-hidden="true">{email.charAt(0).toUpperCase()}</div>
-        <span className="sidebar-email" title={email}>{email}</span>
-        <LogoutButton />
+        <div className="sidebar-footer-row">
+          <div className="sidebar-avatar" aria-hidden="true">{email.charAt(0).toUpperCase()}</div>
+          <span className="sidebar-email" title={email}>{email}</span>
+        </div>
+        <div className="sidebar-footer-row sidebar-footer-actions">
+          <button type="button" className="sidebar-password-btn"
+            onClick={() => { if (view !== 'account') { restart(); setView('account'); } }}>更改密碼</button>
+          <LogoutButton />
+        </div>
       </div>
     </aside>
-    {view === 'dashboard' ? <main className="main">
+    {view === 'account' ? <main className="main">
+      <header className="main-header"><div><span className="eyebrow">帳號設定</span><h1>更改密碼</h1></div></header>
+      <ChangePassword />
+    </main> : view === 'dashboard' ? <main className="main">
       <header className="main-header"><div><span className="eyebrow">業務員總覽</span><h1>儀表板</h1></div></header>
       <Dashboard />
     </main> : <main className="main">

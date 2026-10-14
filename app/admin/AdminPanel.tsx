@@ -59,6 +59,30 @@ export default function AdminPanel() {
     }
   }
 
+  async function resetPassword(email: string) {
+    const newPassword = window.prompt(`幫 ${email} 設一組暫用密碼（至少 8 個字元），再自己用LINE等方式告訴對方：`);
+    if (!newPassword) return;
+    if (newPassword.length < 8) {
+      window.alert('密碼至少需要 8 個字元。');
+      return;
+    }
+    setBusyEmail(email);
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? '重設失敗');
+      window.alert('密碼已重設，請把新密碼告訴對方。');
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : '重設失敗');
+    } finally {
+      setBusyEmail(null);
+    }
+  }
+
   return (
     <div className="admin-wrap">
       <div className="admin-card">
@@ -87,6 +111,8 @@ export default function AdminPanel() {
                 onClick={() => decide(u.email, 'approved')}>開通</button>}
               {u.status !== 'rejected' && <button type="button" className="ghost-btn" disabled={busyEmail === u.email}
                 onClick={() => decide(u.email, 'rejected')}>{u.status === 'approved' ? '撤銷' : '拒絕'}</button>}
+              {u.status === 'approved' && <button type="button" className="ghost-btn" disabled={busyEmail === u.email}
+                onClick={() => resetPassword(u.email)}>重設密碼</button>}
             </div>
           </li>)}
         </ul>}

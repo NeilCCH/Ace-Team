@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isAdminEmail } from '@/lib/auth';
 import { applyForAccount } from '@/lib/db';
+import { hashPassword, isValidPassword } from '@/lib/password';
 
 export const runtime = 'nodejs';
 
@@ -14,7 +15,7 @@ export async function POST(req: NextRequest) {
   if (!body || typeof body !== 'object') {
     return NextResponse.json({ error: '請輸入 Email。' }, { status: 400 });
   }
-  const { email, name, note } = body as Record<string, unknown>;
+  const { email, name, note, password } = body as Record<string, unknown>;
   if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
     return NextResponse.json({ error: '請輸入有效的 Email。' }, { status: 400 });
   }
@@ -24,17 +25,22 @@ export async function POST(req: NextRequest) {
   if (note !== undefined && (typeof note !== 'string' || note.length > 500)) {
     return NextResponse.json({ error: '備註太長。' }, { status: 400 });
   }
+  if (!isValidPassword(password)) {
+    return NextResponse.json({ error: '密碼至少需要 8 個字元。' }, { status: 400 });
+  }
 
   const normalizedEmail = email.trim().toLowerCase();
   if (isAdminEmail(normalizedEmail)) {
-    return NextResponse.json({ status: 'approved', message: '這個帳號已經是管理員，可以直接登入。' });
+    return NextResponse.json({ status: 'approved', message: '這個帳號已經是管理員，可以直接登入，不用在這裡申請。' });
   }
 
   try {
+    const passwordHash = await hashPassword(password);
     const account = await applyForAccount(
       normalizedEmail,
       typeof name === 'string' && name.trim() ? name.trim() : null,
       typeof note === 'string' && note.trim() ? note.trim() : null,
+      passwordHash,
     );
     const message =
       account.status === 'approved'
