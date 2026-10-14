@@ -812,7 +812,8 @@ textarea.case-input {
   color: var(--text-muted);
 }
 
-.login-field input {
+.login-field input,
+.login-field select {
   font-family: inherit;
   font-size: 14px;
   color: var(--text);
@@ -830,6 +831,12 @@ textarea.case-input {
 .login-submit {
   margin-top: 6px;
   width: 100%;
+}
+
+.login-links {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
 }
 
 .login-apply-link {
@@ -973,13 +980,20 @@ textarea.case-input {
   overflow-y: auto;
   padding: 32px;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
 }
 
 .account-card {
   width: 100%;
   max-width: 360px;
-  align-self: flex-start;
+}
+
+.account-card-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin: -4px 0 4px;
 }
 
 .dash-loading,

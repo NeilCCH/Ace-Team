@@ -221,34 +221,37 @@ export async function getPasswordHash(email: string): Promise<string | null> {
   return rows[0]?.password_hash ?? null;
 }
 
-// 申請帳號：新 email 一律建立成 pending（含自己設定的密碼）；若之前被拒絕
-// 過，重新申請會把狀態收回 pending 重新排審，並更新姓名／備註／密碼；已經
-// 是 pending 或 approved 則原樣返回，不重複建立、不打擾正在排審或已開通
-// 的申請（也不會用這次送來的密碼覆寫掉原本的）。
+// 申請帳號：新 email 一律建立成 pending（含自己設定的密碼、安全問題與答案）；
+// 若之前被拒絕過，重新申請會把狀態收回 pending 重新排審，並更新姓名／
+// 備註／密碼／安全問題；已經是 pending 或 approved 則原樣返回，不重複
+// 建立、不打擾正在排審或已開通的申請（也不會用這次送來的密碼覆寫掉原本的）。
 export async function applyForAccount(
   email: string,
   name: string | null,
   note: string | null,
   passwordHash: string,
+  securityQuestion: string,
+  securityAnswerHash: string,
 ): Promise<UserAccount> {
   const existing = await getUserAccount(email);
   if (existing && existing.status !== 'rejected') return existing;
   const { rows } = await getPool().query(
-    `INSERT INTO users (email, name, note, password_hash, status, requested_at, decided_at, decided_by)
-     VALUES ($1, $2, $3, $4, 'pending', now(), NULL, NULL)
+    `INSERT INTO users (email, name, note, password_hash, security_question, security_answer_hash, status, requested_at, decided_at, decided_by)
+     VALUES ($1, $2, $3, $4, $5, $6, 'pending', now(), NULL, NULL)
      ON CONFLICT (email) DO UPDATE SET
        name = EXCLUDED.name, note = EXCLUDED.note, password_hash = EXCLUDED.password_hash,
+       security_question = EXCLUDED.security_question, security_answer_hash = EXCLUDED.security_answer_hash,
        status = 'pending', requested_at = now(), decided_at = NULL, decided_by = NULL
      RETURNING email, name, note, status, requested_at, decided_at, decided_by`,
-    [email, name, note, passwordHash],
+    [email, name, note, passwordHash, securityQuestion, securityAnswerHash],
   );
   return toUserAccount(rows[0]);
 }
 
-// 設定／更新密碼（自助改密碼、或管理員幫忘記密碼的人重設）。如果這個 email
-// 還沒有 users 資料列（例如管理員第一次設定個人密碼），順便建一筆
-// status=approved 的紀錄——管理員本來就不受 status 限制，approved 只是
-// 讓這筆紀錄看起來一致，不影響登入判斷。
+// 設定／更新密碼（自助改密碼、忘記密碼答對安全問題後自助重設、或管理員幫
+// 忘記密碼的人重設）。如果這個 email 還沒有 users 資料列（例如管理員第一
+// 次設定個人密碼），順便建一筆 status=approved 的紀錄——管理員本來就不受
+// status 限制，approved 只是讓這筆紀錄看起來一致，不影響登入判斷。
 export async function setUserPassword(email: string, passwordHash: string): Promise<void> {
   await getPool().query(
     `INSERT INTO users (email, password_hash, status, requested_at)
@@ -256,6 +259,34 @@ export async function setUserPassword(email: string, passwordHash: string): Prom
      ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash`,
     [email, passwordHash],
   );
+}
+
+// 自助設定／更新安全問題（申請時沒設定過的既有帳號——例如管理員——可以
+// 之後在「更改密碼」頁補設定）。
+export async function setSecurityQuestion(email: string, question: string, answerHash: string): Promise<void> {
+  await getPool().query(
+    `INSERT INTO users (email, security_question, security_answer_hash, status, requested_at)
+     VALUES ($1, $2, $3, 'approved', now())
+     ON CONFLICT (email) DO UPDATE SET security_question = EXCLUDED.security_question, security_answer_hash = EXCLUDED.security_answer_hash`,
+    [email, question, answerHash],
+  );
+}
+
+export async function getSecurityQuestion(email: string): Promise<string | null> {
+  const { rows } = await getPool().query<{ security_question: string | null }>(
+    `SELECT security_question FROM users WHERE email = $1`,
+    [email],
+  );
+  return rows[0]?.security_question ?? null;
+}
+
+// 只有忘記密碼流程需要看到答案雜湊，不對外回傳。
+export async function getSecurityAnswerHash(email: string): Promise<string | null> {
+  const { rows } = await getPool().query<{ security_answer_hash: string | null }>(
+    `SELECT security_answer_hash FROM users WHERE email = $1`,
+    [email],
+  );
+  return rows[0]?.security_answer_hash ?? null;
 }
 
 export async function listUserAccounts(): Promise<UserAccount[]> {

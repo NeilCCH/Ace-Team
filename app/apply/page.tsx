@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { SECURITY_QUESTIONS } from '@/lib/securityQuestions';
 
 export default function ApplyPage() {
   const [email, setEmail] = useState('');
@@ -8,9 +9,13 @@ export default function ApplyPage() {
   const [note, setNote] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [securityQuestionChoice, setSecurityQuestionChoice] = useState<string>(SECURITY_QUESTIONS[0]);
+  const [customQuestion, setCustomQuestion] = useState('');
+  const [securityAnswer, setSecurityAnswer] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const isCustomQuestion = securityQuestionChoice === '自訂問題';
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -25,12 +30,21 @@ export default function ApplyPage() {
       setError('兩次輸入的密碼不一致。');
       return;
     }
+    const securityQuestion = isCustomQuestion ? customQuestion.trim() : securityQuestionChoice;
+    if (!securityQuestion) {
+      setError('請輸入自訂的安全問題。');
+      return;
+    }
+    if (!securityAnswer.trim()) {
+      setError('請輸入安全問題的答案。');
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch('/api/apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, name, note, password }),
+        body: JSON.stringify({ email, name, note, password, securityQuestion, securityAnswer }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -103,6 +117,34 @@ export default function ApplyPage() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="再輸入一次"
                 autoComplete="new-password"
+                required
+              />
+            </label>
+            <label className="login-field">
+              <span>安全問題（忘記密碼時用來驗證身分）</span>
+              <select value={securityQuestionChoice} onChange={(e) => setSecurityQuestionChoice(e.target.value)}>
+                {SECURITY_QUESTIONS.map((q) => <option key={q} value={q}>{q}</option>)}
+              </select>
+            </label>
+            {isCustomQuestion && (
+              <label className="login-field">
+                <span>自訂問題內容</span>
+                <input
+                  type="text"
+                  value={customQuestion}
+                  onChange={(e) => setCustomQuestion(e.target.value)}
+                  placeholder="自己想一個只有你知道答案的問題"
+                  required
+                />
+              </label>
+            )}
+            <label className="login-field">
+              <span>答案</span>
+              <input
+                type="text"
+                value={securityAnswer}
+                onChange={(e) => setSecurityAnswer(e.target.value)}
+                placeholder="請記住這個答案，忘記密碼時要用"
                 required
               />
             </label>

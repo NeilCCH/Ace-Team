@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   if (!body || typeof body !== 'object') {
     return NextResponse.json({ error: '請輸入 Email。' }, { status: 400 });
   }
-  const { email, name, note, password } = body as Record<string, unknown>;
+  const { email, name, note, password, securityQuestion, securityAnswer } = body as Record<string, unknown>;
   if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
     return NextResponse.json({ error: '請輸入有效的 Email。' }, { status: 400 });
   }
@@ -28,6 +28,12 @@ export async function POST(req: NextRequest) {
   if (!isValidPassword(password)) {
     return NextResponse.json({ error: '密碼至少需要 8 個字元。' }, { status: 400 });
   }
+  if (typeof securityQuestion !== 'string' || !securityQuestion.trim() || securityQuestion.length > 200) {
+    return NextResponse.json({ error: '請選擇或輸入一個安全問題。' }, { status: 400 });
+  }
+  if (typeof securityAnswer !== 'string' || !securityAnswer.trim() || securityAnswer.length > 200) {
+    return NextResponse.json({ error: '請輸入安全問題的答案。' }, { status: 400 });
+  }
 
   const normalizedEmail = email.trim().toLowerCase();
   if (isAdminEmail(normalizedEmail)) {
@@ -36,11 +42,15 @@ export async function POST(req: NextRequest) {
 
   try {
     const passwordHash = await hashPassword(password);
+    // 答案忽略大小寫與前後空白，避免使用者忘記密碼時因為大小寫不同而卡住。
+    const securityAnswerHash = await hashPassword(securityAnswer.trim().toLowerCase());
     const account = await applyForAccount(
       normalizedEmail,
       typeof name === 'string' && name.trim() ? name.trim() : null,
       typeof note === 'string' && note.trim() ? note.trim() : null,
       passwordHash,
+      securityQuestion.trim(),
+      securityAnswerHash,
     );
     const message =
       account.status === 'approved'

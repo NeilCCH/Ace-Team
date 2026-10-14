@@ -40,7 +40,9 @@ CREATE TABLE IF NOT EXISTS users (
   decided_by TEXT
 );
 
--- 如果是舊資料庫、users 表已經存在但沒有 password_hash 欄位，補上去。
+-- 如果是舊資料庫、users 表已經存在但缺欄位，補上去（重複執行安全）。
 ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS security_question TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS security_answer_hash TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
