@@ -9,11 +9,23 @@ import LogoutButton from './LogoutButton';
 type Mode = 'case' | 'roleplay';
 type View = 'coach' | 'dashboard' | 'account';
 type Attachment = { name: string; mediaType: string; data: string };
-type Message = { role: 'user' | 'assistant'; content: string; attachments?: Attachment[]; isError?: boolean };
+// speaker 記的是這則回覆「實際上是誰在講話」，跟當下的 mode 不完全一樣——
+// 角色扮演快結束時那句「結束對練並取得講評」，mode 還是 roleplay，但AI
+// 已經切回教練身份在給講評，不是繼續扮演客戶，見 resolveSpeaker()。
+type Speaker = 'coach' | 'customer';
+type Message = { role: 'user' | 'assistant'; content: string; attachments?: Attachment[]; isError?: boolean; speaker?: Speaker };
 const CASE_LIMIT = 12000;
 const MESSAGE_LIMIT = 4000;
 const MAX_ATTACHMENTS = 4;
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+// 跟 route.ts 的 FINISH_MESSAGE_PREFIX 對應——判斷這一輪是不是「結束對練並
+// 取得講評」，用來決定回覆的 speaker 要算教練還是客戶。
+const FINISH_MESSAGE_PREFIX = '結束對練並取得講評';
+
+function resolveSpeaker(lastUserContent: string, nextMode: Mode): Speaker {
+  if (lastUserContent.startsWith(FINISH_MESSAGE_PREFIX)) return 'coach';
+  return nextMode === 'roleplay' ? 'customer' : 'coach';
+}
 // 目前只支援圖片（拍紙本資料最常見的情境）；PDF需要升級Anthropic SDK才能支援，見route.ts註解。
 const ACCEPTED_ATTACHMENT_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
@@ -46,6 +58,14 @@ export default function ChatApp({ email, isAdmin }: { email: string; isAdmin: bo
   const fileInputRef = useRef<HTMLInputElement>(null);
   const module = MODULES.find((item) => item.id === moduleId) ?? MODULES[0];
   const lineModules = modulesForLine(lineId);
+  // 「教練正在整理回饋…」等候字樣要跟即將出現的回覆是誰講的一致——開始／
+  // 結束角色扮演那兩個轉場訊息送出時，mode 狀態還沒切換，所以不能直接用
+  // mode 判斷，要跟 resolveSpeaker() 用一樣的邏輯從最後一句使用者訊息反推。
+  const lastUserMessageContent = [...messages].reverse().find((item) => item.role === 'user')?.content ?? '';
+  const pendingSpeaker: Speaker = resolveSpeaker(
+    lastUserMessageContent,
+    lastUserMessageContent.startsWith('開始角色扮演') || mode === 'roleplay' ? 'roleplay' : 'case',
+  );
 
   function switchLine(nextLine: CoachLine) {
     if (nextLine === lineId || busy.current) return;
@@ -104,7 +124,9 @@ export default function ChatApp({ email, isAdmin }: { email: string; isAdmin: bo
         throw new Error(typeof data.error === 'string' ? data.error : '回覆格式異常，請重試。');
       }
       if (typeof data.caseId === 'number') caseIdRef.current = data.caseId;
-      setMessages((previous) => [...previous, { role: 'assistant', content: data.reply }]);
+      const lastUserContent = next[next.length - 1]?.content ?? '';
+      const speaker = resolveSpeaker(lastUserContent, nextMode);
+      setMessages((previous) => [...previous, { role: 'assistant', content: data.reply, speaker }]);
       return true;
     } catch (error) {
       setMessages((previous) => [...previous, {
@@ -165,7 +187,7 @@ export default function ChatApp({ email, isAdmin }: { email: string; isAdmin: bo
   async function finishRoleplay() {
     if (busy.current) return;
     const next: Message[] = [...messages.filter((item) => !item.isError),
-      { role: 'user', content: '結束對練並取得講評。請停止扮演客戶，給出具體評分、做得好的地方及下一步建議。' }];
+      { role: 'user', content: `${FINISH_MESSAGE_PREFIX}。請停止扮演客戶，給出具體評分、做得好的地方及下一步建議。` }];
     setMessages(next);
     if (await askCoach(next, 'roleplay')) setMode('case');
   }
@@ -180,7 +202,7 @@ export default function ChatApp({ email, isAdmin }: { email: string; isAdmin: bo
     setMessages(next);
     const ok = await askCoach(next, retryMode);
     if (ok && lastContent.startsWith('開始角色扮演')) setMode('roleplay');
-    if (ok && lastContent.startsWith('結束對練並取得講評')) setMode('case');
+    if (ok && lastContent.startsWith(FINISH_MESSAGE_PREFIX)) setMode('case');
   }
 
   function restart() {
@@ -261,7 +283,7 @@ export default function ChatApp({ email, isAdmin }: { email: string; isAdmin: bo
       <Dashboard />
     </main> : <main className="main">
       <header className="main-header"><div><span className="eyebrow">互動教練</span><h1>{module.name}</h1></div>
-        {started && <div className="header-controls"><span className="mode-badge">{mode === 'roleplay' ? '角色扮演中' : '個案分析'}</span>
+        {started && <div className="header-controls">
           <button type="button" className="ghost-btn" disabled={loading} onClick={restart}>換一個個案</button></div>}</header>
       {!started ? <section className="intro-panel" aria-labelledby="case-title">
         <span className="eyebrow">步驟 1 / 提供背景</span><h2 id="case-title">描述你想討論的客戶情境</h2>
@@ -275,9 +297,19 @@ export default function ChatApp({ email, isAdmin }: { email: string; isAdmin: bo
         <div className="action-row"><button type="button" className="ghost-btn" onClick={loadSample} disabled={sampleLoading}>{sampleLoading ? '載入中…' : '載入範例個案'}</button>
           <button type="button" className="primary-btn" onClick={startCase} disabled={(!caseText.trim() && attachments.length === 0) || loading}>開始個案分析</button></div>
       </section> : <>
+        <div className={`mode-banner ${mode}`} role="status">
+          <span className="mode-banner-icon" aria-hidden="true">{mode === 'roleplay' ? '🎭' : '🧭'}</span>
+          <div className="mode-banner-text">
+            <strong>{mode === 'roleplay' ? '角色扮演中：AI 正在扮演「客戶」' : '個案分析模式：教練依框架卡給建議'}</strong>
+            <span>{mode === 'roleplay' ? '接下來的回覆是模擬客戶會說的話，不是教練本人的講評。' : '跟教練來回討論，準備好了再開始角色扮演練習。'}</span>
+          </div>
+        </div>
         <div className="chat-scroll" ref={scrollRef} role="log" aria-live="polite" aria-relevant="additions text">
           {messages.map((item, index) => <div key={index} className={`bubble-row ${item.role}`}>
-            <div className={`bubble ${item.role} ${item.isError ? 'error' : ''}`}>
+            <div className={`bubble ${item.role} ${item.isError ? 'error' : ''} ${item.speaker === 'customer' ? 'customer-voice' : ''}`}>
+              {item.role === 'assistant' && !item.isError && <span className={`bubble-speaker ${item.speaker === 'customer' ? 'customer' : 'coach'}`}>
+                {item.speaker === 'customer' ? '客戶' : '教練'}
+              </span>}
               {item.attachments && item.attachments.length > 0 && <div className="bubble-attachments">
                 {item.attachments.map((a, i) =>
                   <img key={i} src={`data:${a.mediaType};base64,${a.data}`} alt={a.name} className="bubble-attach-thumb" />)}
@@ -287,7 +319,8 @@ export default function ChatApp({ email, isAdmin }: { email: string; isAdmin: bo
                 {item.isError ? <button type="button" onClick={retry} disabled={loading}>重試</button> :
                   <button type="button" onClick={() => copy(item.content, index)}>{copied === index ? '已複製' : '複製回覆'}</button>}
               </div>}</div></div>)}
-          {loading && <div className="bubble-row assistant"><div className="bubble assistant pending" role="status">教練正在整理回饋…</div></div>}
+          {loading && <div className="bubble-row assistant"><div className={`bubble assistant pending ${pendingSpeaker === 'customer' ? 'customer-voice' : ''}`} role="status">
+            {pendingSpeaker === 'customer' ? '客戶正在輸入…' : '教練正在整理回饋…'}</div></div>}
         </div>
         <div className="conversation-actions">{mode === 'case' ?
           <button type="button" className="ghost-btn" disabled={loading} onClick={beginRoleplay}>開始角色扮演</button> :

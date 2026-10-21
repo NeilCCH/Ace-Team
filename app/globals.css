@@ -338,14 +338,6 @@ button:disabled {
   margin-bottom: 5px;
 }
 
-.mode-badge {
-  background: var(--accent-soft);
-  color: var(--accent-strong);
-  border-radius: 999px;
-  font-size: 12px;
-  padding: 6px 10px;
-}
-
 .header-controls {
   display: flex;
   align-items: center;
@@ -483,6 +475,55 @@ textarea.case-input {
   cursor: not-allowed;
 }
 
+/* 個案分析／角色扮演的模式提示——換成一條橫跨對話區上方、顏色明顯不同的
+   色塊，取代原本容易被忽略的小文字徽章，一眼就能看出目前在哪個模式。 */
+.mode-banner {
+  margin: 16px 24px 0;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.mode-banner-icon {
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+.mode-banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mode-banner-text strong {
+  font-size: 13px;
+}
+
+.mode-banner-text span {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.mode-banner.case {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-soft);
+}
+
+.mode-banner.case .mode-banner-text strong {
+  color: var(--accent-strong);
+}
+
+.mode-banner.roleplay {
+  background: var(--sb-gold-soft);
+  border: 1px solid rgba(215, 168, 75, 0.35);
+}
+
+.mode-banner.roleplay .mode-banner-text strong {
+  color: var(--gold);
+}
+
 .chat-scroll {
   flex: 1;
   overflow-y: auto;
@@ -520,6 +561,26 @@ textarea.case-input {
   color: var(--assistant-bubble-text);
   border: 1px solid var(--border);
   border-bottom-left-radius: 4px;
+}
+
+/* 角色扮演時AI是在扮演「客戶」，不是教練本人講話——氣泡要跟平時的教練
+   回覆明顯不同（金色調），不然使用者得自己讀內容判斷AI現在是誰。 */
+.bubble.assistant.customer-voice {
+  background: var(--sb-gold-soft);
+  border-color: rgba(215, 168, 75, 0.4);
+}
+
+.bubble-speaker {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  margin-bottom: 4px;
+  color: var(--accent);
+}
+
+.bubble-speaker.customer {
+  color: var(--gold);
 }
 
 .bubble.error {
@@ -731,6 +792,10 @@ textarea.case-input {
   .intro-panel {
     max-height: 100%;
     padding: 24px 16px;
+  }
+
+  .mode-banner {
+    margin: 12px 16px 0;
   }
 
   .chat-scroll {
