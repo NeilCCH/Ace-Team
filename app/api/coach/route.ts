@@ -154,7 +154,11 @@ export async function POST(req: NextRequest) {
   try {
     const response = await anthropic.messages.create({
       model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-5',
-      max_tokens: 2000,
+      // claude-sonnet-5 思考預設是開著的（adaptive，這個舊版SDK型別裡還沒有
+      // thinking 參數可以關掉），思考本身也算在 max_tokens 裡——2000太低，
+      // 思考一吃掉大半預算，正式回覆文字就被截斷甚至整段是空的。拉高到
+      // 8192 留足夠空間給思考＋實際回覆。
+      max_tokens: 8192,
       system,
       messages: typedMessages.map((m) => ({ role: m.role, content: toAnthropicContent(m) })),
     });
@@ -163,6 +167,13 @@ export async function POST(req: NextRequest) {
       .filter((block): block is Anthropic.TextBlock => block.type === 'text')
       .map((block) => block.text)
       .join('\n');
+
+    // 空回覆不要悄悄回傳——前端收到空字串會直接不渲染任何文字，畫面上只
+    // 剩下按鈕，看起來像壞掉。明確回報成錯誤，讓使用者看得到「重試」。
+    if (!reply.trim()) {
+      console.error('coach api empty reply', { stop_reason: response.stop_reason, model: response.model });
+      return NextResponse.json({ error: 'AI 教練沒有產生回覆內容，請重試一次。' }, { status: 502 });
+    }
 
     // 個案記錄是加分功能，寫入失敗不能讓教練回覆跟著失敗——錯誤只記錄，不拋出。
     let effectiveCaseId = caseId;
