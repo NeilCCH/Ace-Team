@@ -1204,6 +1204,34 @@ textarea.case-input {
   color: var(--accent-strong);
 }
 
+.dash-case-right {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.dash-resume-btn {
+  border: 1px solid var(--accent);
+  background: var(--surface);
+  color: var(--accent);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.dash-resume-btn:hover {
+  background: var(--accent-soft);
+}
+
+.dash-resume-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 @media (max-width: 720px) {
   .dash-wrap {
     padding: 16px;

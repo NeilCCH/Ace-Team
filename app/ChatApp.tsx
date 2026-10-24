@@ -26,6 +26,34 @@ function resolveSpeaker(lastUserContent: string, nextMode: Mode): Speaker {
   if (lastUserContent.startsWith(FINISH_MESSAGE_PREFIX)) return 'coach';
   return nextMode === 'roleplay' ? 'customer' : 'coach';
 }
+
+interface RawCaseMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+// 中斷後再繼續：資料庫只存了 role／content，沒存當時的 mode 或 speaker。
+// 這裡依序重放歷史訊息，用跟 askCoach() 送出請求、切換 mode 時完全一樣的
+// 判斷邏輯（看使用者訊息是不是「開始角色扮演」／FINISH_MESSAGE_PREFIX）
+// 反推每則教練回覆當時的 speaker，以及整段對話結束時停在哪個 mode，讓
+// 「繼續」回來的畫面跟中斷前一致。
+function deriveResumedState(raw: RawCaseMessage[]): { messages: Message[]; mode: Mode } {
+  let mode: Mode = 'case';
+  let lastUserContent = '';
+  const messages: Message[] = [];
+  for (const item of raw) {
+    if (item.role === 'user') {
+      lastUserContent = item.content;
+      messages.push({ role: 'user', content: item.content });
+      continue;
+    }
+    const requestMode: Mode = lastUserContent.startsWith('開始角色扮演') || mode === 'roleplay' ? 'roleplay' : 'case';
+    messages.push({ role: 'assistant', content: item.content, speaker: resolveSpeaker(lastUserContent, requestMode) });
+    if (lastUserContent.startsWith(FINISH_MESSAGE_PREFIX)) mode = 'case';
+    else if (lastUserContent.startsWith('開始角色扮演')) mode = 'roleplay';
+  }
+  return { messages, mode };
+}
 // 目前只支援圖片（拍紙本資料最常見的情境）；PDF需要升級Anthropic SDK才能支援，見route.ts註解。
 const ACCEPTED_ATTACHMENT_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
@@ -52,6 +80,7 @@ export default function ChatApp({ email, isAdmin }: { email: string; isAdmin: bo
   const [copied, setCopied] = useState<number | null>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [attachError, setAttachError] = useState<string | null>(null);
+  const [resumingCaseId, setResumingCaseId] = useState<number | null>(null);
   const caseIdRef = useRef<number | null>(null);
   const busy = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -205,6 +234,38 @@ export default function ChatApp({ email, isAdmin }: { email: string; isAdmin: bo
     if (ok && lastContent.startsWith(FINISH_MESSAGE_PREFIX)) setMode('case');
   }
 
+  async function resumeCase(caseId: number) {
+    if (busy.current) return;
+    busy.current = true;
+    setResumingCaseId(caseId);
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/case/${caseId}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : '讀取個案失敗，請稍後再試。');
+      const raw = Array.isArray(data.messages) ? (data.messages as RawCaseMessage[]) : [];
+      const { messages: resumed, mode: resumedMode } = deriveResumedState(raw);
+      const resumedModule = typeof data.moduleId === 'string' ? MODULES.find((item) => item.id === data.moduleId) : undefined;
+      caseIdRef.current = caseId;
+      setLineId(resumedModule?.line ?? (data.line as CoachLine) ?? lineId);
+      if (typeof data.moduleId === 'string') setModuleId(data.moduleId);
+      setMessages(resumed);
+      setMode(resumedMode);
+      setCaseText('');
+      setDraft('');
+      setAttachments([]);
+      setAttachError(null);
+      setStarted(true);
+      setView('coach');
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : '讀取個案失敗，請稍後再試。');
+    } finally {
+      busy.current = false;
+      setResumingCaseId(null);
+      setLoading(false);
+    }
+  }
+
   function restart() {
     if (busy.current) return;
     setStarted(false);
@@ -280,7 +341,7 @@ export default function ChatApp({ email, isAdmin }: { email: string; isAdmin: bo
       <ChangePassword />
     </main> : view === 'dashboard' ? <main className="main">
       <header className="main-header"><div><span className="eyebrow">業務員總覽</span><h1>儀表板</h1></div></header>
-      <Dashboard />
+      <Dashboard onResume={resumeCase} resumingId={resumingCaseId} />
     </main> : <main className="main">
       <header className="main-header"><div><span className="eyebrow">互動教練</span><h1>{module.name}</h1></div>
         {started && <div className="header-controls">

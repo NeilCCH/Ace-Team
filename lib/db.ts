@@ -84,6 +84,25 @@ export async function getCaseOwner(caseId: number): Promise<string | null> {
   return rows[0]?.user_email ?? null;
 }
 
+// 中斷後再繼續個案研討：讀回個案本身（確認擁有者、模組）跟完整的歷史訊息。
+export async function getCaseById(caseId: number): Promise<CaseRecord | null> {
+  const { rows } = await getPool().query<CaseRecord>(`SELECT * FROM cases WHERE id = $1`, [caseId]);
+  return rows[0] ?? null;
+}
+
+export interface CaseMessageRecord {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export async function getCaseMessages(caseId: number): Promise<CaseMessageRecord[]> {
+  const { rows } = await getPool().query<CaseMessageRecord>(
+    `SELECT role, content FROM case_messages WHERE case_id = $1 ORDER BY id ASC`,
+    [caseId],
+  );
+  return rows;
+}
+
 export interface DashboardStats {
   totalCases: number;
   casesThisMonth: number;

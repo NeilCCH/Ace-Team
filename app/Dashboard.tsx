@@ -30,7 +30,7 @@ function formatDate(iso: string | null): string {
   return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${String(d.getFullYear()).slice(2)}`;
 }
 
-export default function Dashboard() {
+export default function Dashboard({ onResume, resumingId }: { onResume: (caseId: number) => void; resumingId: number | null }) {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -88,9 +88,15 @@ export default function Dashboard() {
                 <p className="dash-case-text">{c.firstMessage}</p>
                 <span className="dash-list-meta">{mod?.name ?? c.moduleId} · {formatDate(c.updatedAt)}</span>
               </div>
-              <span className={`dash-case-status ${c.status}`}>
-                {c.status === 'completed' ? `已完成${c.score !== null ? ' · ' + c.score + '分' : ''}` : '進行中'}
-              </span>
+              <div className="dash-case-right">
+                <span className={`dash-case-status ${c.status}`}>
+                  {c.status === 'completed' ? `已完成${c.score !== null ? ' · ' + c.score + '分' : ''}` : '進行中'}
+                </span>
+                {c.status !== 'completed' && <button type="button" className="dash-resume-btn"
+                  disabled={resumingId !== null} onClick={() => onResume(c.id)}>
+                  {resumingId === c.id ? '載入中…' : '繼續個案'}
+                </button>}
+              </div>
             </li>;
           })}
         </ul>
