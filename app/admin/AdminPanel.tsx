@@ -12,6 +12,18 @@ interface UserAccount {
   decidedBy: string | null;
 }
 
+interface ApiUsage {
+  userEmail: string;
+  callCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  callCountThisMonth: number;
+  inputTokensThisMonth: number;
+  outputTokensThisMonth: number;
+  lastUsedAt: string | null;
+}
+
 const STATUS_LABEL: Record<UserAccount['status'], string> = {
   pending: '待審核',
   approved: '已開通',
@@ -27,6 +39,8 @@ export default function AdminPanel() {
   const [users, setUsers] = useState<UserAccount[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyEmail, setBusyEmail] = useState<string | null>(null);
+  const [usage, setUsage] = useState<ApiUsage[] | null>(null);
+  const [usageError, setUsageError] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -39,7 +53,18 @@ export default function AdminPanel() {
     }
   }
 
-  useEffect(() => { void load(); }, []);
+  async function loadUsage() {
+    try {
+      const res = await fetch('/api/admin/usage');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? '讀取失敗');
+      setUsage(data.usage);
+    } catch (err) {
+      setUsageError(err instanceof Error ? err.message : '讀取失敗');
+    }
+  }
+
+  useEffect(() => { void load(); void loadUsage(); }, []);
 
   async function decide(email: string, decision: 'approved' | 'rejected') {
     setBusyEmail(email);
@@ -137,6 +162,37 @@ export default function AdminPanel() {
             </div>
           </li>)}
         </ul>}
+
+        <div className="admin-usage-section">
+          <div className="admin-header"><h1>API Token 使用量</h1></div>
+          {usageError && <p className="login-error">{usageError}</p>}
+          {!usage && !usageError && <p className="dash-loading">載入中…</p>}
+          {usage && usage.length === 0 && <p className="dash-empty">還沒有使用紀錄。</p>}
+          {usage && usage.length > 0 && <div className="admin-usage-table-wrap">
+            <table className="admin-usage-table">
+              <thead>
+                <tr>
+                  <th>帳號</th>
+                  <th>本月呼叫</th>
+                  <th>本月 Token（輸入／輸出）</th>
+                  <th>累計呼叫</th>
+                  <th>累計 Token（輸入／輸出）</th>
+                  <th>最後使用</th>
+                </tr>
+              </thead>
+              <tbody>
+                {usage.map((u) => <tr key={u.userEmail}>
+                  <td>{u.userEmail}</td>
+                  <td className="num">{u.callCountThisMonth.toLocaleString()}</td>
+                  <td className="num">{u.inputTokensThisMonth.toLocaleString()} ／ {u.outputTokensThisMonth.toLocaleString()}</td>
+                  <td className="num">{u.callCount.toLocaleString()}</td>
+                  <td className="num">{u.inputTokens.toLocaleString()} ／ {u.outputTokens.toLocaleString()}</td>
+                  <td>{u.lastUsedAt ? formatDate(u.lastUsedAt) : '—'}</td>
+                </tr>)}
+              </tbody>
+            </table>
+          </div>}
+        </div>
       </div>
     </div>
   );

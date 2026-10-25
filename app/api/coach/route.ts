@@ -3,7 +3,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { buildSystemPrompt, CoachMode } from '@/lib/systemPrompt';
 import { getModule } from '@/lib/modules';
 import { SESSION_COOKIE, verifySession } from '@/lib/auth';
-import { appendMessage, completeCase, createCase, getCaseOwner } from '@/lib/db';
+import { appendMessage, completeCase, createCase, getCaseOwner, recordApiUsage } from '@/lib/db';
 
 export const runtime = 'nodejs';
 
@@ -162,6 +162,17 @@ export async function POST(req: NextRequest) {
       system,
       messages: typedMessages.map((m) => ({ role: m.role, content: toAnthropicContent(m) })),
     });
+
+    // 用量記錄：不管這次回覆最後是不是空的，token 都已經花掉了，所以在
+    // 空回覆判斷之前就記，管理後台看到的用量才跟實際API花費一致。寫入
+    // 失敗不影響教練回覆，只記錯誤。
+    if (userEmail) {
+      try {
+        await recordApiUsage(userEmail, moduleId, response.usage.input_tokens, response.usage.output_tokens);
+      } catch (usageErr) {
+        console.error('api usage logging error', usageErr);
+      }
+    }
 
     const reply = response.content
       .filter((block): block is Anthropic.TextBlock => block.type === 'text')

@@ -336,3 +336,67 @@ export async function deleteUserAccount(email: string): Promise<boolean> {
   const { rowCount } = await getPool().query(`DELETE FROM users WHERE email = $1`, [email]);
   return (rowCount ?? 0) > 0;
 }
+
+// 每次呼叫 Anthropic API 記一筆用量。寫入失敗不能讓教練回覆跟著失敗，呼叫
+// 端（app/api/coach/route.ts）一律包在 try/catch 裡、只記錯誤不拋出。
+export async function recordApiUsage(
+  userEmail: string,
+  moduleId: string,
+  inputTokens: number,
+  outputTokens: number,
+): Promise<void> {
+  await getPool().query(
+    `INSERT INTO api_usage (user_email, module_id, input_tokens, output_tokens) VALUES ($1, $2, $3, $4)`,
+    [userEmail, moduleId, inputTokens, outputTokens],
+  );
+}
+
+export interface ApiUsageByUser {
+  userEmail: string;
+  callCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  callCountThisMonth: number;
+  inputTokensThisMonth: number;
+  outputTokensThisMonth: number;
+  lastUsedAt: string | null;
+}
+
+// 管理後台用：依使用者彙總 token 用量（累計與本月），依累計總量由高到低排序。
+export async function getApiUsageByUser(): Promise<ApiUsageByUser[]> {
+  const { rows } = await getPool().query<{
+    user_email: string;
+    call_count: string;
+    input_tokens: string;
+    output_tokens: string;
+    call_count_month: string;
+    input_tokens_month: string;
+    output_tokens_month: string;
+    last_used_at: string | null;
+  }>(
+    `SELECT
+       user_email,
+       count(*)::text AS call_count,
+       coalesce(sum(input_tokens), 0)::text AS input_tokens,
+       coalesce(sum(output_tokens), 0)::text AS output_tokens,
+       count(*) FILTER (WHERE created_at >= date_trunc('month', now()))::text AS call_count_month,
+       coalesce(sum(input_tokens) FILTER (WHERE created_at >= date_trunc('month', now())), 0)::text AS input_tokens_month,
+       coalesce(sum(output_tokens) FILTER (WHERE created_at >= date_trunc('month', now())), 0)::text AS output_tokens_month,
+       max(created_at)::text AS last_used_at
+     FROM api_usage
+     GROUP BY user_email
+     ORDER BY (sum(input_tokens) + sum(output_tokens)) DESC`,
+  );
+  return rows.map((r) => ({
+    userEmail: r.user_email,
+    callCount: Number(r.call_count),
+    inputTokens: Number(r.input_tokens),
+    outputTokens: Number(r.output_tokens),
+    totalTokens: Number(r.input_tokens) + Number(r.output_tokens),
+    callCountThisMonth: Number(r.call_count_month),
+    inputTokensThisMonth: Number(r.input_tokens_month),
+    outputTokensThisMonth: Number(r.output_tokens_month),
+    lastUsedAt: r.last_used_at,
+  }));
+}

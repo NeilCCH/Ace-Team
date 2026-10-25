@@ -46,3 +46,17 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS security_question TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS security_answer_hash TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
+
+-- 每次呼叫 Anthropic API 記一筆用量，供管理後台統計每人的 token 使用量。
+-- 寫入失敗不影響教練回覆（見 app/api/coach/route.ts），單純是統計用途。
+CREATE TABLE IF NOT EXISTS api_usage (
+  id BIGSERIAL PRIMARY KEY,
+  user_email TEXT NOT NULL,
+  module_id TEXT NOT NULL,
+  input_tokens INTEGER NOT NULL,
+  output_tokens INTEGER NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_usage_user_email ON api_usage(user_email);
+CREATE INDEX IF NOT EXISTS idx_api_usage_created_at ON api_usage(created_at);
