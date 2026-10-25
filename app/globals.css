@@ -524,6 +524,15 @@ textarea.case-input {
   color: var(--gold);
 }
 
+.mode-banner.readonly {
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+}
+
+.mode-banner.readonly .mode-banner-text strong {
+  color: var(--text-muted);
+}
+
 .chat-scroll {
   flex: 1;
   overflow-y: auto;

@@ -92,10 +92,10 @@ export default function Dashboard({ onResume, resumingId }: { onResume: (caseId:
                 <span className={`dash-case-status ${c.status}`}>
                   {c.status === 'completed' ? `已完成${c.score !== null ? ' · ' + c.score + '分' : ''}` : '進行中'}
                 </span>
-                {c.status !== 'completed' && <button type="button" className="dash-resume-btn"
+                <button type="button" className="dash-resume-btn"
                   disabled={resumingId !== null} onClick={() => onResume(c.id)}>
-                  {resumingId === c.id ? '載入中…' : '繼續個案'}
-                </button>}
+                  {resumingId === c.id ? '載入中…' : (c.status === 'completed' ? '查看個案' : '繼續個案')}
+                </button>
               </div>
             </li>;
           })}

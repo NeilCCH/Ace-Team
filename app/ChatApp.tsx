@@ -81,6 +81,9 @@ export default function ChatApp({ email, isAdmin }: { email: string; isAdmin: bo
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [resumingCaseId, setResumingCaseId] = useState<number | null>(null);
+  // 已完成（已取得講評）的個案回看時唯讀：不能再送訊息、附檔、繼續角色
+  // 扮演，只能瀏覽歷史對話跟複製教練的回覆。
+  const [readOnly, setReadOnly] = useState(false);
   const caseIdRef = useRef<number | null>(null);
   const busy = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -251,6 +254,7 @@ export default function ChatApp({ email, isAdmin }: { email: string; isAdmin: bo
       if (typeof data.moduleId === 'string') setModuleId(data.moduleId);
       setMessages(resumed);
       setMode(resumedMode);
+      setReadOnly(data.status === 'completed');
       setCaseText('');
       setDraft('');
       setAttachments([]);
@@ -275,6 +279,7 @@ export default function ChatApp({ email, isAdmin }: { email: string; isAdmin: bo
     setDraft('');
     setAttachments([]);
     setAttachError(null);
+    setReadOnly(false);
     caseIdRef.current = null;
   }
 
@@ -358,13 +363,19 @@ export default function ChatApp({ email, isAdmin }: { email: string; isAdmin: bo
         <div className="action-row"><button type="button" className="ghost-btn" onClick={loadSample} disabled={sampleLoading}>{sampleLoading ? '載入中…' : '載入範例個案'}</button>
           <button type="button" className="primary-btn" onClick={startCase} disabled={(!caseText.trim() && attachments.length === 0) || loading}>開始個案分析</button></div>
       </section> : <>
-        <div className={`mode-banner ${mode}`} role="status">
+        {readOnly ? <div className="mode-banner readonly" role="status">
+          <span className="mode-banner-icon" aria-hidden="true">📄</span>
+          <div className="mode-banner-text">
+            <strong>已完成・唯讀瀏覽</strong>
+            <span>這個個案已經取得教練講評，可以回看對話內容，但無法繼續編輯或角色扮演。</span>
+          </div>
+        </div> : <div className={`mode-banner ${mode}`} role="status">
           <span className="mode-banner-icon" aria-hidden="true">{mode === 'roleplay' ? '🎭' : '🧭'}</span>
           <div className="mode-banner-text">
             <strong>{mode === 'roleplay' ? '角色扮演中：AI 正在扮演「客戶」' : '個案分析模式：教練依框架卡給建議'}</strong>
             <span>{mode === 'roleplay' ? '接下來的回覆是模擬客戶會說的話，不是教練本人的講評。' : '跟教練來回討論，準備好了再開始角色扮演練習。'}</span>
           </div>
-        </div>
+        </div>}
         <div className="chat-scroll" ref={scrollRef} role="log" aria-live="polite" aria-relevant="additions text">
           {messages.map((item, index) => <div key={index} className={`bubble-row ${item.role}`}>
             <div className={`bubble ${item.role} ${item.isError ? 'error' : ''} ${item.speaker === 'customer' ? 'customer-voice' : ''}`}>
@@ -383,17 +394,17 @@ export default function ChatApp({ email, isAdmin }: { email: string; isAdmin: bo
           {loading && <div className="bubble-row assistant"><div className={`bubble assistant pending ${pendingSpeaker === 'customer' ? 'customer-voice' : ''}`} role="status">
             {pendingSpeaker === 'customer' ? '客戶正在輸入…' : '教練正在整理回饋…'}</div></div>}
         </div>
-        <div className="conversation-actions">{mode === 'case' ?
+        {!readOnly && <div className="conversation-actions">{mode === 'case' ?
           <button type="button" className="ghost-btn" disabled={loading} onClick={beginRoleplay}>開始角色扮演</button> :
-          <button type="button" className="ghost-btn" disabled={loading} onClick={finishRoleplay}>結束對練並取得講評</button>}</div>
-        {attachmentPicker}
-        <div className="composer"><label className="sr-only" htmlFor="chat-draft">輸入訊息</label>
+          <button type="button" className="ghost-btn" disabled={loading} onClick={finishRoleplay}>結束對練並取得講評</button>}</div>}
+        {!readOnly && attachmentPicker}
+        {!readOnly && <div className="composer"><label className="sr-only" htmlFor="chat-draft">輸入訊息</label>
           <textarea id="chat-draft" rows={2} maxLength={MESSAGE_LIMIT} value={draft}
             placeholder={mode === 'roleplay' ? '對客戶說一句話…' : '回覆教練，或請他示範話術…'}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); send(); } }} />
-          <button type="button" className="primary-btn" onClick={send} disabled={loading || (!draft.trim() && attachments.length === 0)}>送出</button></div>
-        <p className="keyboard-hint">⌘ / Ctrl + Enter 送出 · Enter 換行</p>
+          <button type="button" className="primary-btn" onClick={send} disabled={loading || (!draft.trim() && attachments.length === 0)}>送出</button></div>}
+        {!readOnly && <p className="keyboard-hint">⌘ / Ctrl + Enter 送出 · Enter 換行</p>}
       </>}
     </main>}
   </div>;
