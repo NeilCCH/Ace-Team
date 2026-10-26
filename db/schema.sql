@@ -58,6 +58,12 @@ CREATE TABLE IF NOT EXISTS api_usage (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- 記錄當時實際呼叫的模型（可能因為 ANTHROPIC_MODEL 環境變數調整過而不只
+-- 一種），用來依正確的單價換算預估費用。這個欄位之前不存在，所以在這次
+-- 更新之前寫入的舊資料會是 NULL——後台遇到 NULL 一律顯示「—」，不會用
+-- 現在的模型價格去套舊資料、算出不準確的金額。
+ALTER TABLE api_usage ADD COLUMN IF NOT EXISTS model TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_api_usage_user_email ON api_usage(user_email);
 CREATE INDEX IF NOT EXISTS idx_api_usage_created_at ON api_usage(created_at);
 

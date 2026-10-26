@@ -150,10 +150,11 @@ export async function POST(req: NextRequest) {
   const system = buildSystemPrompt(moduleId, mode as CoachMode);
   const typedMessages = messages as ChatMessage[];
   const lastUserMessage = typedMessages[typedMessages.length - 1];
+  const model = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5';
 
   try {
     const response = await anthropic.messages.create({
-      model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-5',
+      model,
       // claude-sonnet-5 思考預設是開著的（adaptive，這個舊版SDK型別裡還沒有
       // thinking 參數可以關掉），思考本身也算在 max_tokens 裡——2000太低，
       // 思考一吃掉大半預算，正式回覆文字就被截斷甚至整段是空的。拉高到
@@ -164,11 +165,12 @@ export async function POST(req: NextRequest) {
     });
 
     // 用量記錄：不管這次回覆最後是不是空的，token 都已經花掉了，所以在
-    // 空回覆判斷之前就記，管理後台看到的用量才跟實際API花費一致。寫入
-    // 失敗不影響教練回覆，只記錯誤。
+    // 空回覆判斷之前就記，管理後台看到的用量才跟實際API花費一致。也記下
+    // 這次實際用的模型，讓後台能依正確單價換算預估費用（見
+    // lib/modelPricing.ts）。寫入失敗不影響教練回覆，只記錯誤。
     if (userEmail) {
       try {
-        await recordApiUsage(userEmail, moduleId, response.usage.input_tokens, response.usage.output_tokens);
+        await recordApiUsage(userEmail, moduleId, model, response.usage.input_tokens, response.usage.output_tokens);
       } catch (usageErr) {
         console.error('api usage logging error', usageErr);
       }

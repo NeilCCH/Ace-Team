@@ -22,6 +22,12 @@ interface ApiUsage {
   inputTokensThisMonth: number;
   outputTokensThisMonth: number;
   lastUsedAt: string | null;
+  costUsd: number | null;
+  costUsdThisMonth: number | null;
+}
+
+function formatCost(usd: number | null): string {
+  return usd === null ? '—' : `$${usd.toFixed(2)}`;
 }
 
 interface RecentApiError {
@@ -190,6 +196,7 @@ export default function AdminPanel() {
 
         <div className="admin-usage-section">
           <div className="admin-header"><h1>API Token 使用量</h1></div>
+          <p className="admin-usage-note">費用是依官方定價表估算，不是 Anthropic 帳單的實際金額，僅供參考；顯示「—」代表這筆紀錄找不到對應的模型價格（例如更新這個功能前的舊資料）。</p>
           {usageError && <p className="login-error">{usageError}</p>}
           {!usage && !usageError && <p className="dash-loading">載入中…</p>}
           {usage && usage.length === 0 && <p className="dash-empty">還沒有使用紀錄。</p>}
@@ -200,8 +207,10 @@ export default function AdminPanel() {
                   <th>帳號</th>
                   <th>本月呼叫</th>
                   <th>本月 Token（輸入／輸出）</th>
+                  <th>本月預估費用</th>
                   <th>累計呼叫</th>
                   <th>累計 Token（輸入／輸出）</th>
+                  <th>累計預估費用</th>
                   <th>最後使用</th>
                 </tr>
               </thead>
@@ -210,8 +219,10 @@ export default function AdminPanel() {
                   <td>{u.userEmail}</td>
                   <td className="num">{u.callCountThisMonth.toLocaleString()}</td>
                   <td className="num">{u.inputTokensThisMonth.toLocaleString()} ／ {u.outputTokensThisMonth.toLocaleString()}</td>
+                  <td className="num">{formatCost(u.costUsdThisMonth)}</td>
                   <td className="num">{u.callCount.toLocaleString()}</td>
                   <td className="num">{u.inputTokens.toLocaleString()} ／ {u.outputTokens.toLocaleString()}</td>
+                  <td className="num">{formatCost(u.costUsd)}</td>
                   <td>{u.lastUsedAt ? formatDate(u.lastUsedAt) : '—'}</td>
                 </tr>)}
               </tbody>

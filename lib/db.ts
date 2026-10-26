@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { estimateCostUsd } from './modelPricing';
 
 let pool: Pool | null = null;
 
@@ -342,12 +343,13 @@ export async function deleteUserAccount(email: string): Promise<boolean> {
 export async function recordApiUsage(
   userEmail: string,
   moduleId: string,
+  model: string,
   inputTokens: number,
   outputTokens: number,
 ): Promise<void> {
   await getPool().query(
-    `INSERT INTO api_usage (user_email, module_id, input_tokens, output_tokens) VALUES ($1, $2, $3, $4)`,
-    [userEmail, moduleId, inputTokens, outputTokens],
+    `INSERT INTO api_usage (user_email, module_id, model, input_tokens, output_tokens) VALUES ($1, $2, $3, $4, $5)`,
+    [userEmail, moduleId, model, inputTokens, outputTokens],
   );
 }
 
@@ -361,12 +363,21 @@ export interface ApiUsageByUser {
   inputTokensThisMonth: number;
   outputTokensThisMonth: number;
   lastUsedAt: string | null;
+  // null 代表這個使用者至少有一筆用量找不到對應的定價（舊資料沒記模型、
+  // 或模型不在 lib/modelPricing.ts 的定價表裡），金額不完整就不顯示，
+  // 不要用錯的單價硬算出一個誤導人的數字。
+  costUsd: number | null;
+  costUsdThisMonth: number | null;
 }
 
-// 管理後台用：依使用者彙總 token 用量（累計與本月），依累計總量由高到低排序。
+// 管理後台用：依使用者彙總 token 用量（累計與本月），依累計總量由高到低
+// 排序。費用是依每一筆用量當時實際用的模型分別換算再加總——同一個使用者
+// 的歷史紀錄裡可能橫跨不同模型（例如 ANTHROPIC_MODEL 環境變數改過），不能
+// 直接用現在的模型價格套用到全部歷史 token 上。
 export async function getApiUsageByUser(): Promise<ApiUsageByUser[]> {
   const { rows } = await getPool().query<{
     user_email: string;
+    model: string | null;
     call_count: string;
     input_tokens: string;
     output_tokens: string;
@@ -377,6 +388,7 @@ export async function getApiUsageByUser(): Promise<ApiUsageByUser[]> {
   }>(
     `SELECT
        user_email,
+       model,
        count(*)::text AS call_count,
        coalesce(sum(input_tokens), 0)::text AS input_tokens,
        coalesce(sum(output_tokens), 0)::text AS output_tokens,
@@ -385,20 +397,52 @@ export async function getApiUsageByUser(): Promise<ApiUsageByUser[]> {
        coalesce(sum(output_tokens) FILTER (WHERE created_at >= date_trunc('month', now())), 0)::text AS output_tokens_month,
        max(created_at)::text AS last_used_at
      FROM api_usage
-     GROUP BY user_email
-     ORDER BY (sum(input_tokens) + sum(output_tokens)) DESC`,
+     GROUP BY user_email, model`,
   );
-  return rows.map((r) => ({
-    userEmail: r.user_email,
-    callCount: Number(r.call_count),
-    inputTokens: Number(r.input_tokens),
-    outputTokens: Number(r.output_tokens),
-    totalTokens: Number(r.input_tokens) + Number(r.output_tokens),
-    callCountThisMonth: Number(r.call_count_month),
-    inputTokensThisMonth: Number(r.input_tokens_month),
-    outputTokensThisMonth: Number(r.output_tokens_month),
-    lastUsedAt: r.last_used_at,
-  }));
+
+  const byUser = new Map<string, ApiUsageByUser>();
+  for (const r of rows) {
+    const inputTokens = Number(r.input_tokens);
+    const outputTokens = Number(r.output_tokens);
+    const inputTokensMonth = Number(r.input_tokens_month);
+    const outputTokensMonth = Number(r.output_tokens_month);
+    const cost = r.model ? estimateCostUsd(r.model, inputTokens, outputTokens) : null;
+    const costMonth = r.model ? estimateCostUsd(r.model, inputTokensMonth, outputTokensMonth) : null;
+
+    const existing = byUser.get(r.user_email);
+    if (!existing) {
+      byUser.set(r.user_email, {
+        userEmail: r.user_email,
+        callCount: Number(r.call_count),
+        inputTokens,
+        outputTokens,
+        totalTokens: inputTokens + outputTokens,
+        callCountThisMonth: Number(r.call_count_month),
+        inputTokensThisMonth: inputTokensMonth,
+        outputTokensThisMonth: outputTokensMonth,
+        lastUsedAt: r.last_used_at,
+        costUsd: cost,
+        costUsdThisMonth: costMonth,
+      });
+      continue;
+    }
+
+    existing.callCount += Number(r.call_count);
+    existing.inputTokens += inputTokens;
+    existing.outputTokens += outputTokens;
+    existing.totalTokens += inputTokens + outputTokens;
+    existing.callCountThisMonth += Number(r.call_count_month);
+    existing.inputTokensThisMonth += inputTokensMonth;
+    existing.outputTokensThisMonth += outputTokensMonth;
+    if (r.last_used_at && (!existing.lastUsedAt || r.last_used_at > existing.lastUsedAt)) {
+      existing.lastUsedAt = r.last_used_at;
+    }
+    existing.costUsd = existing.costUsd === null || cost === null ? null : existing.costUsd + cost;
+    existing.costUsdThisMonth =
+      existing.costUsdThisMonth === null || costMonth === null ? null : existing.costUsdThisMonth + costMonth;
+  }
+
+  return [...byUser.values()].sort((a, b) => b.totalTokens - a.totalTokens);
 }
 
 // 呼叫 Anthropic API 失敗時記一筆（額度不足、逾時…），供後台顯示警示。
