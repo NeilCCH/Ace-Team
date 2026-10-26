@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { SESSION_COOKIE, verifySession, isAdminEmail } from '@/lib/auth';
-import { getApiUsageByUser } from '@/lib/db';
+import { getApiUsageByUser, getRecentApiErrors } from '@/lib/db';
 
 export const runtime = 'nodejs';
 
@@ -12,8 +12,8 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const usage = await getApiUsageByUser();
-    return NextResponse.json({ usage });
+    const [usage, recentErrors] = await Promise.all([getApiUsageByUser(), getRecentApiErrors()]);
+    return NextResponse.json({ usage, recentErrors });
   } catch (err) {
     console.error('admin usage api error', err);
     return NextResponse.json({ error: '讀取失敗，請確認資料庫已設定。' }, { status: 500 });

@@ -24,6 +24,21 @@ interface ApiUsage {
   lastUsedAt: string | null;
 }
 
+interface RecentApiError {
+  userEmail: string;
+  status: number | null;
+  errorType: string | null;
+  message: string;
+  createdAt: string;
+}
+
+function errorLabel(e: RecentApiError): string {
+  if (e.errorType === 'billing_error') return '額度不足';
+  if (e.errorType) return e.errorType;
+  if (e.status) return `狀態碼 ${e.status}`;
+  return '連線失敗';
+}
+
 const STATUS_LABEL: Record<UserAccount['status'], string> = {
   pending: '待審核',
   approved: '已開通',
@@ -41,6 +56,7 @@ export default function AdminPanel() {
   const [busyEmail, setBusyEmail] = useState<string | null>(null);
   const [usage, setUsage] = useState<ApiUsage[] | null>(null);
   const [usageError, setUsageError] = useState<string | null>(null);
+  const [recentErrors, setRecentErrors] = useState<RecentApiError[] | null>(null);
 
   async function load() {
     try {
@@ -59,6 +75,7 @@ export default function AdminPanel() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? '讀取失敗');
       setUsage(data.usage);
+      setRecentErrors(data.recentErrors ?? []);
     } catch (err) {
       setUsageError(err instanceof Error ? err.message : '讀取失敗');
     }
@@ -130,6 +147,14 @@ export default function AdminPanel() {
   return (
     <div className="admin-wrap">
       <div className="admin-card">
+        {recentErrors && recentErrors.length > 0 && <div className="admin-alert">
+          <strong>⚠️ 最近 7 天內有 AI 教練呼叫失敗，請留意</strong>
+          <ul>
+            {recentErrors.map((e, i) => <li key={i}>
+              {formatDate(e.createdAt)} · {e.userEmail} · {errorLabel(e)}
+            </li>)}
+          </ul>
+        </div>}
         <div className="admin-header">
           <h1>帳號申請審核</h1>
           <a className="ghost-btn" href="/">回主畫面</a>

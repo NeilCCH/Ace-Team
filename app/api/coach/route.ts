@@ -3,7 +3,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { buildSystemPrompt, CoachMode } from '@/lib/systemPrompt';
 import { getModule } from '@/lib/modules';
 import { SESSION_COOKIE, verifySession } from '@/lib/auth';
-import { appendMessage, completeCase, createCase, getCaseOwner, recordApiUsage } from '@/lib/db';
+import { appendMessage, completeCase, createCase, getCaseOwner, recordApiError, recordApiUsage } from '@/lib/db';
 
 export const runtime = 'nodejs';
 
@@ -209,6 +209,33 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ reply, caseId: effectiveCaseId });
   } catch (err) {
     console.error('coach api error', err);
+
+    // 這個舊版SDK（0.32.1）沒有402專用的型別子類別，402跟413、529一樣都
+    // 落在泛用的 APIError——要判斷是不是「額度不足」只能看 status，不能
+    // 靠 instanceof 細分類別。err.error 是 Anthropic 回傳的完整JSON主體
+    // （{type:'error', error:{type:'billing_error', message:...}}），
+    // 從裡面挖 error.type 存起來，讓後台看得出具體是哪一種錯誤。
+    const status = err instanceof Anthropic.APIError ? err.status ?? null : null;
+    const errorType =
+      err instanceof Anthropic.APIError && err.error && typeof err.error === 'object'
+        ? ((err.error as { error?: { type?: string } }).error?.type ?? null)
+        : null;
+
+    if (userEmail) {
+      try {
+        await recordApiError(userEmail, status, errorType, err instanceof Error ? err.message : String(err));
+      } catch (logErr) {
+        console.error('api error logging error', logErr);
+      }
+    }
+
+    if (status === 402) {
+      return NextResponse.json(
+        { error: 'AI 服務目前額度不足，請聯絡管理員確認 Anthropic 帳戶額度，稍後再試。' },
+        { status: 502 },
+      );
+    }
+
     return NextResponse.json({ error: 'AI 教練暫時無法回應，請稍後再試一次。' }, { status: 502 });
   }
 }

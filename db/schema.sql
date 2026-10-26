@@ -60,3 +60,16 @@ CREATE TABLE IF NOT EXISTS api_usage (
 
 CREATE INDEX IF NOT EXISTS idx_api_usage_user_email ON api_usage(user_email);
 CREATE INDEX IF NOT EXISTS idx_api_usage_created_at ON api_usage(created_at);
+
+-- 呼叫 Anthropic API 失敗時記一筆（例如額度不足的 402 billing_error、
+-- 連線逾時等），供管理後台顯示警示，不用等業務員回報「AI壞了」才發現。
+CREATE TABLE IF NOT EXISTS api_errors (
+  id BIGSERIAL PRIMARY KEY,
+  user_email TEXT NOT NULL,
+  status INTEGER,
+  error_type TEXT,
+  message TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_errors_created_at ON api_errors(created_at);

@@ -400,3 +400,49 @@ export async function getApiUsageByUser(): Promise<ApiUsageByUser[]> {
     lastUsedAt: r.last_used_at,
   }));
 }
+
+// 呼叫 Anthropic API 失敗時記一筆（額度不足、逾時…），供後台顯示警示。
+// 寫入失敗一樣不拋出——這本身就是在記錄另一個失敗，不能再讓它卡住回覆。
+export async function recordApiError(
+  userEmail: string,
+  status: number | null,
+  errorType: string | null,
+  message: string,
+): Promise<void> {
+  await getPool().query(
+    `INSERT INTO api_errors (user_email, status, error_type, message) VALUES ($1, $2, $3, $4)`,
+    [userEmail, status, errorType, message.slice(0, 500)],
+  );
+}
+
+export interface RecentApiError {
+  userEmail: string;
+  status: number | null;
+  errorType: string | null;
+  message: string;
+  createdAt: string;
+}
+
+// 管理後台用：最近 7 天內的API錯誤，由新到舊，最多 20 筆。
+export async function getRecentApiErrors(): Promise<RecentApiError[]> {
+  const { rows } = await getPool().query<{
+    user_email: string;
+    status: number | null;
+    error_type: string | null;
+    message: string;
+    created_at: string;
+  }>(
+    `SELECT user_email, status, error_type, message, created_at
+     FROM api_errors
+     WHERE created_at >= now() - interval '7 days'
+     ORDER BY created_at DESC
+     LIMIT 20`,
+  );
+  return rows.map((r) => ({
+    userEmail: r.user_email,
+    status: r.status,
+    errorType: r.error_type,
+    message: r.message,
+    createdAt: r.created_at,
+  }));
+}

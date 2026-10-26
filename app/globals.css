@@ -1045,6 +1045,32 @@ textarea.case-input {
   border-color: var(--danger);
 }
 
+.admin-alert {
+  background: var(--surface-muted);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 20px;
+  color: var(--danger);
+}
+
+.admin-alert strong {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.admin-alert ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.admin-alert li {
+  margin-bottom: 2px;
+}
+
 .admin-usage-section {
   margin-top: 32px;
 }
