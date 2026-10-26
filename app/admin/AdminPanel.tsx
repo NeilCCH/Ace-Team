@@ -39,13 +39,6 @@ function errorLabel(e: RecentApiError): string {
   return '連線失敗';
 }
 
-interface CostSummary {
-  currency: string;
-  totalUsd: number;
-  periodStart: string;
-  periodEnd: string;
-}
-
 const STATUS_LABEL: Record<UserAccount['status'], string> = {
   pending: '待審核',
   approved: '已開通',
@@ -64,9 +57,6 @@ export default function AdminPanel() {
   const [usage, setUsage] = useState<ApiUsage[] | null>(null);
   const [usageError, setUsageError] = useState<string | null>(null);
   const [recentErrors, setRecentErrors] = useState<RecentApiError[] | null>(null);
-  const [cost, setCost] = useState<CostSummary | null>(null);
-  const [costError, setCostError] = useState<string | null>(null);
-  const [costNotConfigured, setCostNotConfigured] = useState(false);
 
   async function load() {
     try {
@@ -91,26 +81,7 @@ export default function AdminPanel() {
     }
   }
 
-  // 「尚未設定 Admin API Key」是預期中的狀態（這個功能本來就選配），用
-  // 柔和的提示顯示；其他查詢失敗（金鑰無效、Anthropic那邊出錯）才當成
-  // 真的錯誤標紅處理。
-  async function loadCost() {
-    try {
-      const res = await fetch('/api/admin/cost');
-      const data = await res.json();
-      if (res.status === 501) {
-        setCostNotConfigured(true);
-        setCostError(data.error ?? '尚未設定。');
-        return;
-      }
-      if (!res.ok) throw new Error(data.error ?? '讀取失敗');
-      setCost(data);
-    } catch (err) {
-      setCostError(err instanceof Error ? err.message : '讀取失敗');
-    }
-  }
-
-  useEffect(() => { void load(); void loadUsage(); void loadCost(); }, []);
+  useEffect(() => { void load(); void loadUsage(); }, []);
 
   async function decide(email: string, decision: 'approved' | 'rejected') {
     setBusyEmail(email);
@@ -219,12 +190,6 @@ export default function AdminPanel() {
 
         <div className="admin-usage-section">
           <div className="admin-header"><h1>API Token 使用量</h1></div>
-          {cost && <p className="admin-cost-summary">
-            本月（至今，UTC）已花費約 <strong>${cost.totalUsd.toFixed(2)} {cost.currency}</strong>
-            <span className="admin-cost-note">資料來源：Anthropic Cost Report，更新可能有數分鐘延遲；這是「花了多少」，不是「剩多少」——真正的剩餘額度仍要到 Anthropic Console 查看。</span>
-          </p>}
-          {costNotConfigured && <p className="admin-cost-summary muted">{costError}</p>}
-          {costError && !costNotConfigured && !cost && <p className="login-error">{costError}</p>}
           {usageError && <p className="login-error">{usageError}</p>}
           {!usage && !usageError && <p className="dash-loading">載入中…</p>}
           {usage && usage.length === 0 && <p className="dash-empty">還沒有使用紀錄。</p>}

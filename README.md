@@ -57,7 +57,7 @@
 
 **API Token 使用量**：`/admin` 後台下方有一張表，依使用者列出本月與累計的呼叫次數、輸入／輸出 token 數、最後使用時間，依累計用量由高到低排序。每次呼叫 Anthropic API（`app/api/coach/route.ts`）都會記一筆到 `api_usage` 資料表，寫入失敗不影響教練回覆，純粹是統計用途。
 
-**本月已花費多少美金**（選配）：查過 Anthropic 官方文件確認過，「帳戶裡還剩多少額度」這個數字沒有任何 API 能查，只有 Console 的 Billing 頁面看得到。退而求其次，`/admin` 用量表格上方會顯示「本月（至今）已花費約 $X USD」，資料來源是 Anthropic 的 Cost Report Admin API。這個功能需要額外設定環境變數 `ANTHROPIC_ADMIN_API_KEY`——到 Anthropic Console（Settings → Admin API Keys）申請一組 `sk-ant-admin...` 開頭的金鑰（**跟平常對話用的 `ANTHROPIC_API_KEY` 不同、權限更高，不要共用**），貼到 Vercel 的環境變數裡即可；沒設定這個環境變數時後台只會顯示一行說明文字，不影響其他功能。
+查過費用的部分：Anthropic 的 Admin API（含查詢「本月已花費多少」的 Cost Report）**個人帳戶（Individual Org）用不了**，只有正式的 Organization 帳戶才能用，所以這個 app 沒有做對應功能。要查實際花費，直接去 Anthropic Console 的 Spending 頁面看即可。
 
 **API 額度不足的提醒**：這個 app 本身看不到 Anthropic 帳戶「還剩多少餘額」（那是 Billing 頁面或 Admin API 才有的資料，跟一般對話用的 API key 是不同等級的憑證）。但只要額度真的用完、Anthropic 回傳額度不足的錯誤，系統會把這次失敗記進 `api_errors` 資料表，並在 `/admin` 最上方用紅框警示列出最近 7 天的失敗紀錄（含帳號、時間、錯誤類型），不用等業務員回報「AI壞了」才發現；使用者那邊看到的訊息也會明確寫「額度不足」而不是籠統的「請稍後再試」。要查真正的剩餘額度，還是要去 [console.anthropic.com](https://console.anthropic.com) 的 Billing 頁面看。
 
