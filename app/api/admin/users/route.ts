@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { SESSION_COOKIE, verifySession, isAdminEmail } from '@/lib/auth';
-import { decideUserAccount, deleteUserAccount, listUserAccounts, setUserPassword } from '@/lib/db';
+import { decideUserAccount, deleteUserAccount, listUserAccounts, setUserPassword, UserAccount } from '@/lib/db';
 import { hashPassword, isValidPassword } from '@/lib/password';
 
 export const runtime = 'nodejs';
@@ -11,12 +11,21 @@ async function requireAdmin(req: NextRequest): Promise<string | null> {
   return email && isAdminEmail(email) ? email : null;
 }
 
+// 管理員（ALLOWED_EMAILS）在 users 表裡的那一列其實是設定個人密碼時順便
+// 建的（見 lib/db.ts setUserPassword 的註解），不是真的申請紀錄，但沒有
+// 另外區分身份就會跟一般使用者混在一起、依申請時間排序，容易被洗到後面
+// 找不到。這裡幫每筆資料標上 isAdmin，前端把管理員排到最前面並加上標籤。
+function withAdminRole(user: UserAccount): UserAccount & { isAdmin: boolean } {
+  return { ...user, isAdmin: isAdminEmail(user.email) };
+}
+
 export async function GET(req: NextRequest) {
   const admin = await requireAdmin(req);
   if (!admin) return NextResponse.json({ error: '沒有權限。' }, { status: 403 });
 
   try {
-    const users = await listUserAccounts();
+    const users = (await listUserAccounts()).map(withAdminRole);
+    users.sort((a, b) => (a.isAdmin === b.isAdmin ? 0 : a.isAdmin ? -1 : 1));
     return NextResponse.json({ users });
   } catch (err) {
     console.error('admin users list error', err);
@@ -42,7 +51,7 @@ export async function POST(req: NextRequest) {
   try {
     const updated = await decideUserAccount(email.trim().toLowerCase(), decision, admin);
     if (!updated) return NextResponse.json({ error: '找不到這個帳號申請。' }, { status: 404 });
-    return NextResponse.json({ user: updated });
+    return NextResponse.json({ user: withAdminRole(updated) });
   } catch (err) {
     console.error('admin users decide error', err);
     return NextResponse.json({ error: '更新失敗。' }, { status: 500 });

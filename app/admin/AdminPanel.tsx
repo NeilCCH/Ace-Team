@@ -10,6 +10,7 @@ interface UserAccount {
   requestedAt: string;
   decidedAt: string | null;
   decidedBy: string | null;
+  isAdmin: boolean;
 }
 
 interface ApiUsage {
@@ -169,9 +170,10 @@ export default function AdminPanel() {
         {!users && !error && <p className="dash-loading">載入中…</p>}
         {users && users.length === 0 && <p className="dash-empty">還沒有任何申請。</p>}
         {users && users.length > 0 && <ul className="admin-list">
-          {users.map((u) => <li key={u.email} className="admin-row">
+          {users.map((u) => <li key={u.email} className={`admin-row ${u.isAdmin ? 'admin-row-super' : ''}`}>
             <div className="admin-row-main">
               <span className={`admin-status admin-status-${u.status}`}>{STATUS_LABEL[u.status]}</span>
+              {u.isAdmin && <span className="admin-role-badge">最高管理者</span>}
               <div className="admin-row-info">
                 <div className="admin-row-email">{u.email}{u.name ? `（${u.name}）` : ''}</div>
                 {u.note && <div className="admin-row-note">{u.note}</div>}

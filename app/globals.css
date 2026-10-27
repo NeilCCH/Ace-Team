@@ -1013,6 +1013,22 @@ textarea.case-input {
   color: var(--text-muted);
 }
 
+.admin-role-badge {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+  margin-top: 2px;
+  background: var(--sb-gold-soft);
+  color: var(--sb-gold);
+}
+
+.admin-row-super {
+  border-color: var(--sb-gold);
+}
+
 .admin-row-info {
   min-width: 0;
 }
